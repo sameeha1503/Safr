@@ -6,7 +6,7 @@ Implemented on 2026-10-18. The Reunite workspace is `/live-tracking`; companion 
 
 ### Finding the settings and repairing the project
 
-1. Sign in at https://supabase.com/dashboard/project/bfxtulimqxggjageyxrm/sql/new and confirm this is your Safr project.
+1. Sign in at https://supabase.com/dashboard/project/<your-project-ref>/sql/new and confirm this is your Safr project.
 2. Open `backend/supabase/repairs/20261022_reunite.sql`, copy its entire contents into a new SQL query, and click Run. It must finish successfully; if it fails, keep the error text for diagnosis. The transaction rolls back on failure.
 3. Open Project Settings → API Keys. Under Legacy API Keys, reveal the `service_role` key; an existing server secret key (`sb_secret_…`) is also supported. Do not copy the publishable/anon key for this setting. Do not rotate or remove existing keys to perform this repair.
 4. Edit `frontend/.env` locally and add `SUPABASE_SERVICE_ROLE_KEY=` followed by that private key. Never paste the key into chat or commit the file. A deployed app needs the same value in its hosting provider's server environment settings.

@@ -1,6 +1,6 @@
 # API configuration
 
-The existing **Gemini key passed a real generation request** and a complete itinerary test. A new key is not currently necessary. **OSRM, Overpass, Photon and the public development Open-Meteo endpoint do not require API keys.** Supabase project `bfxtulimqxggjageyxrm` is connected and active.
+The existing **Gemini key passed a real generation request** and a complete itinerary test. A new key is not currently necessary. **OSRM, Overpass, Photon and the public development Open-Meteo endpoint do not require API keys.** Supabase project `<your-project-id>` is connected and active.
 
 | Service | Variables | Where to obtain them |
 | --- | --- | --- |
