@@ -1,0 +1,58 @@
+export const ALL_FEATURED = [
+  {
+    name: "Baga Beach",
+    desc: "Famous for nightlife, water sports, and vibrant shacks.",
+    category: "beach",
+    lat: 15.5553,
+    lng: 73.7517,
+  },
+  {
+    name: "Fort Aguada",
+    desc: "17th-century Portuguese fort with stunning ocean views.",
+    category: "monument",
+    lat: 15.492,
+    lng: 73.7737,
+  },
+  {
+    name: "Dudhsagar Waterfalls",
+    desc: "Majestic four-tiered waterfall surrounded by lush forests.",
+    category: "nature",
+    lat: 15.3144,
+    lng: 74.3143,
+  },
+  {
+    name: "Anjuna Flea Market",
+    desc: "Bohemian market offering clothes, jewelry, and live music.",
+    category: "market",
+    lat: 15.5804,
+    lng: 73.7423,
+  },
+  {
+    name: "Palolem Beach",
+    desc: "Scenic, crescent-shaped beach known for its calm waters.",
+    category: "beach",
+    lat: 15.01,
+    lng: 74.0232,
+  },
+  {
+    name: "Basilica of Bom Jesus",
+    desc: "UNESCO World Heritage site holding the mortal remains of St. Francis Xavier.",
+    category: "heritage",
+    lat: 15.5009,
+    lng: 73.9116,
+  },
+  {
+    name: "Chapora Fort",
+    desc: "Iconic fort offering panoramic views of the Arabian Sea and Vagator beach.",
+    category: "monument",
+    lat: 15.6058,
+    lng: 73.7364,
+  },
+  {
+    name: "Arambol Beach",
+    desc: "Laid-back beach popular with backpackers and musicians.",
+    category: "beach",
+    lat: 15.6869,
+    lng: 73.7042,
+  },
+];
