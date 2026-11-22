@@ -1,51 +1,63 @@
+<div align="center">
+
 # Safr
 
-Safr is a travel-safety and trip-planning web app piloted in Goa. It combines maps, route planning, place discovery, itinerary generation, family location sharing, SafeTag QR identification, SOS tools, and a public emergency directory.
+**A travel-safety and trip-planning companion for Goa.**
 
-## What it includes
+Maps · Routing · Itineraries · Live Location Sharing · SOS · Emergency Directory
 
-- Interactive MapLibre map with multi-stop routing and route alternatives
-- Goa place explorer with real photos, weather, sea conditions, opening hours, crowd reports, and bucket lists
-- Time-budgeted itinerary planner with deterministic fallback when AI is unavailable
-- Reunite live companion tracking, meeting points, invite links, and SOS reporting
-- Printable SafeTag QR codes with privacy-preserving guardian alerts
-- Offline emergency fallback and verified Goa emergency contacts
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](misc/LICENSE)
+[![Node](https://img.shields.io/badge/node-24.x-339933?logo=node.js&logoColor=white)](frontend/package.json)
+[![Built with TanStack Start](https://img.shields.io/badge/built%20with-TanStack%20Start-FF4154?logo=react&logoColor=white)](https://tanstack.com/start)
+[![Supabase](https://img.shields.io/badge/backend-Supabase-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com)
 
-Safr does not invent unavailable live data. External services fail softly, and safety guidance is presented as general guidance rather than an official warning.
+</div>
 
-## Stack
+---
 
-- React 19, TypeScript, TanStack Start/Router and TanStack Query
-- Vite 8, Tailwind CSS 4, Radix UI and shadcn/ui
-- Supabase Auth, PostgreSQL, Row Level Security and Realtime
-- MapLibre GL, OpenStreetMap, Overpass, Photon, Valhalla and OSRM
-- Gemini for optional itinerary ranking
-- Wikipedia/Wikimedia and Open-Meteo
-- Twilio for optional SMS or WhatsApp alerts
+Safr helps travelers in Goa move around with more confidence — not by guessing at danger, but by combining real mapped data, community reporting, and honest uncertainty. When the app doesn't have enough information to call a route "safer," it says so instead of making something up.
 
-## Local setup
+## ✨ What it does
 
-Requirements: Node.js 20 or newer and npm.
+| | |
+|---|---|
+| 🗺️ **Interactive routing** | MapLibre-powered map with multi-stop routing, route alternatives, and turn-by-turn directions |
+| 🧭 **Place explorer** | Real photos, weather, sea conditions, opening hours, crowd levels, and a personal bucket list for Goa's spots |
+| 🗓️ **Itinerary planner** | Time-budgeted trip planning with a deterministic fallback so it still works if the AI ranking step is unavailable |
+| 👪 **Reunite** | Live companion location sharing, meeting points, consent-based invite links, and family tracking |
+| 🆘 **SOS** | Hold-to-activate panic button that shares your location and alerts your guardian instantly |
+| 🏷️ **SafeTag** | Printable QR codes that let anyone alert your registered guardian with one scan — no app required on their end |
+| 📞 **Emergency directory** | Verified Goa emergency contacts, available offline |
+| 🛣️ **Road condition reports** | Community-reported closures, flooding, roadworks, and obstructions, plus informational traveler safety reviews |
+
+Safr never invents data it doesn't have. External services fail softly, and anything safety-related is presented as general guidance — never as an official warning.
+
+## 🧱 Tech stack
+
+- **Frontend:** React 19, TypeScript, TanStack Start/Router, TanStack Query, Vite 8, Tailwind CSS 4, Radix UI, shadcn/ui
+- **Backend:** Supabase (Auth, PostgreSQL, Row Level Security, Realtime)
+- **Maps & routing:** MapLibre GL, OpenStreetMap, Overpass, Photon, Valhalla, OSRM
+- **AI:** Gemini (optional itinerary ranking)
+- **Data:** Wikipedia/Wikimedia, Open-Meteo
+- **Alerts:** Twilio (SMS / WhatsApp)
+
+## 🚀 Quick start
+
+**Requirements:** Node.js 20+ and npm.
 
 ```bash
-git clone https://github.com/Prajj11/Safr-AI.git
-cd Safr-AI/frontend
+git clone https://github.com/sameeha1503/Safr.git
+cd Safr/frontend
 npm install
-copy .env.example .env
+cp .env.example .env      # Windows: copy .env.example .env
 npm run dev
 ```
 
-The development server normally opens at `http://localhost:5173`.
+The dev server opens at `http://localhost:5173`.
 
-On macOS or Linux, replace the `copy` command with:
+## ⚙️ Configuration
 
-```bash
-cp .env.example .env
-```
-
-## Configuration
-
-At minimum, configure these values in `frontend/.env`:
+At minimum, set these in `frontend/.env`:
 
 ```dotenv
 VITE_SUPABASE_URL=
@@ -55,7 +67,7 @@ SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ```
 
-Optional services are configured with:
+Optional services:
 
 ```dotenv
 GEMINI_API_KEY=
@@ -77,13 +89,13 @@ TWILIO_WHATSAPP_FROM=
 TWILIO_SMS_FROM=
 ```
 
-Never expose the service-role key, Gemini key, or Twilio credentials in browser-prefixed variables, source control, logs, screenshots, or chat.
+> ⚠️ **Never** commit the service-role key, Gemini key, or Twilio credentials, or expose them in browser-prefixed (`VITE_`) variables, logs, screenshots, or chat.
 
-## Database
+## 🗄️ Database
 
-Apply `backend/supabase/schema.sql` to a new Supabase project, or apply the migrations in `backend/supabase/migrations/` in order. Existing deployments can use the targeted scripts in `backend/supabase/repairs/`.
+Apply `backend/supabase/schema.sql` to a fresh Supabase project, or run the migrations in `backend/supabase/migrations/` in order. Existing deployments can use the targeted scripts in `backend/supabase/repairs/`.
 
-After database changes, verify both anonymous access and authenticated cross-account isolation:
+After any database change, verify access control:
 
 ```bash
 cd frontend
@@ -92,48 +104,51 @@ npm run check:rls-auth
 npm run check:tracking
 ```
 
-## Development commands
+## 🛠️ Development commands
 
-Run commands from `frontend/`:
+Run from `frontend/`:
 
 ```bash
 npm run dev              # development server
 npm run typecheck        # TypeScript validation
-npm run lint             # ESLint
-npm test                 # unit and integration tests
-npm run build            # production build
-npm run start            # serve the production build
-npm run check:browser    # real-browser emergency/offline smoke test
-npm run check:itinerary  # live itinerary fallback check
-npm run check:deployment # schema and notification readiness
+npm run lint              # ESLint
+npm test                  # unit and integration tests
+npm run build             # production build
+npm run start              # serve the production build
+npm run check:browser     # real-browser emergency/offline smoke test
+npm run check:itinerary   # live itinerary fallback check
+npm run check:deployment  # schema and notification readiness
 ```
 
-`check:deployment` validates readiness but deliberately does not send an SMS or WhatsApp message.
+`check:deployment` validates readiness but deliberately does not send a real SMS or WhatsApp message.
 
-## Project layout
+## 📁 Project layout
 
 ```text
-frontend/   application, server functions and production server
-backend/    Supabase schema, migrations, repairs and verification scripts
-misc/tests/ automated unit and integration tests
-docs/       architecture, data-source and production runbooks
+frontend/    application, server functions, and production server
+backend/     Supabase schema, migrations, repairs, and verification scripts
+misc/tests/  automated unit and integration tests
+docs/        architecture, data-source, and production runbooks
 ```
 
-Useful references:
-
+**References:**
 - [Production verification](docs/production-verification.md)
 - [External data sources](docs/data-sources.md)
 - [Remaining service setup](docs/remaining-services-setup.md)
 - [Detailed technical documentation](misc/MASTER_PROJECT_DOCUMENTATION.md)
 
-## Production notes
+## 📌 Production notes
 
-- Use your own production-grade routing and Overpass capacity; public endpoints are suitable only for light use.
+- Use your own production-grade routing and Overpass capacity — public endpoints are suitable only for light use.
 - Probe `GET /healthz` and collect the server's structured JSON request logs.
-- Test Reunite on two physical phones because mobile browsers may suspend background GPS.
+- Test Reunite on two physical phones, since mobile browsers may suspend background GPS.
 - Keep `NOTIFY_MODE=mock` until Twilio sender and recipient consent requirements are satisfied.
 - Apply all database migrations before enabling place caching, crowd reports, saved routes, or Reunite.
 
-## License
+## 👥 Team
+
+Built by **Team KoPS Squad** — Kaitlyn Fernandes, Sameeha Modak & Prajwal Naik.
+
+## 📄 License
 
 MIT — see [misc/LICENSE](misc/LICENSE).
