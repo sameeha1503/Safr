@@ -135,7 +135,7 @@ export async function handleTagAlertRequest(
     });
 
     const notified = Object.values(deliveryStatus).some(
-      (ch) => ch?.status === "sent",
+      (ch) => ch?.status === "sent" || ch?.status === "mocked",
     );
 
     if (!notified) {
