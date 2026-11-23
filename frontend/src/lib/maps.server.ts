@@ -8,6 +8,11 @@ import {
 } from "./route-comparison";
 import { z } from "zod";
 import { fetchValhallaRoutes, type InternalRoute } from "./valhalla.server";
+import {
+  fetchKnownHazardZones,
+  hazardZonesOnRoute,
+  type HazardZone,
+} from "./hazard-zones.server";
 
 export type PlaceHit = {
   id: string;
@@ -105,6 +110,7 @@ export type ScoredRoute = {
   distanceMeters: number;
   durationSeconds: number;
   safety: SafetyEvidence;
+  hazardZones: HazardZone[];
   isFastest: boolean;
   isShortest: boolean;
   isSafest: boolean;
@@ -164,6 +170,7 @@ function scoreRoute(
   safety: SafetyEvidence,
   waypoints: Waypoint[] = [],
   mode: string = "car",
+  hazardZones: HazardZone[] = [],
 ): ScoredRoute {
   const durationMin = Math.ceil(route.duration / 60);
   const distanceKm = Math.round(route.distance / 100) / 10;
@@ -233,6 +240,11 @@ function scoreRoute(
       `Multi-stop trip routed through ${waypoints.length} intermediate stop${waypoints.length > 1 ? "s" : ""}; distance and time summed across all legs.`,
     );
   }
+  if (hazardZones.length > 0) {
+    reasons.push(
+      `Passes within the mapped radius of ${hazardZones.length} known accident-prone location${hazardZones.length > 1 ? "s" : ""}: ${hazardZones.map((z) => z.label).join(", ")}.`,
+    );
+  }
   reasons.push(
     "Distance and time are compared before rounding. Times exclude live traffic.",
     "Google Maps may choose a different path; the displayed path and turn list are the route assessed here.",
@@ -246,6 +258,7 @@ function scoreRoute(
     distanceMeters: route.distance,
     durationSeconds: route.duration,
     safety,
+    hazardZones,
     isFastest: false,
     isShortest: false,
     isSafest: false,
@@ -371,6 +384,7 @@ export async function computeSafeRoutes(
           JSON.stringify(route.geometry.coordinates),
       ) === i,
   );
+  const hazardZonesAll = await fetchKnownHazardZones();
   let ways: RoadWay[] = [];
   try {
     const points = unique.flatMap((r) =>
@@ -419,16 +433,30 @@ export async function computeSafeRoutes(
       assessRoadConditions(r.legs, ways, isNight),
       waypoints,
       mode,
+      hazardZonesOnRoute(
+        r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+        hazardZonesAll,
+      ),
     ),
   );
   const best = routePreferences(candidates);
+  let safestIndex = best.safest;
+  if (candidates.length > 1 && candidates.some((r) => r.hazardZones.length > 0)) {
+    const combinedScore = (r: (typeof candidates)[number]) =>
+      (r.safety.sufficient ? r.safety.mappedRiskExposure! : 0) +
+      r.hazardZones.length * 2;
+    const ranked = candidates
+      .map((r, i) => ({ i, score: combinedScore(r) }))
+      .sort((a, b) => a.score - b.score);
+    safestIndex = ranked[0]!.score < ranked[1]!.score ? ranked[0]!.i : -1;
+  }
   return candidates.map((r, i) => ({
     ...r,
-    kind: i === best.fastest ? "fastest" : i === best.safest ? "safer" : "alt",
+    kind: i === best.fastest ? "fastest" : i === safestIndex ? "safer" : "alt",
     label:
       i === best.fastest ? "Fastest available route" : `Alternative ${i + 1}`,
     isFastest: i === best.fastest,
     isShortest: i === best.shortest,
-    isSafest: i === best.safest,
+    isSafest: i === safestIndex,
   }));
 }

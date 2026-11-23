@@ -47,6 +47,7 @@ export function useRouteLayers({
   const destMarkerRef = useRef<MapLibreMarker | null>(null);
   const stopMarkersRef = useRef<MapLibreMarker[]>([]);
   const stepMarkerRef = useRef<MapLibreMarker | null>(null);
+  const hazardMarkersRef = useRef<MapLibreMarker[]>([]);
 
   const routesLatest = useLatest(routes);
   const selectedLatest = useLatest(selected);
@@ -278,6 +279,8 @@ export function useRouteLayers({
     originMarkerRef.current = null;
     destMarkerRef.current = null;
     stepMarkerRef.current = null;
+    hazardMarkersRef.current.forEach((m) => m.remove());
+    hazardMarkersRef.current = [];
 
     // 1. Origin marker
     const originEl = document.createElement("div");
@@ -350,6 +353,36 @@ export function useRouteLayers({
       });
     }
 
+    // 4. Hazard zone markers for the selected route
+    const selectedRoute = routes[selected];
+    (selectedRoute?.hazardZones ?? []).forEach((zone) => {
+      const zoneEl = document.createElement("div");
+      zoneEl.style.cssText =
+        "background-color:#f59e0b;color:white;width:26px;height:26px;border-radius:50%;border:2.5px solid white;box-shadow:0 3px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;";
+      zoneEl.textContent = "!";
+      zoneEl.title = zone.label;
+
+      const zonePopup = document.createElement("div");
+      const zTitle = document.createElement("b");
+      zTitle.textContent = `⚠ ${zone.label}`;
+      const zDesc = document.createElement("div");
+      zDesc.textContent = zone.description;
+      const zLink = document.createElement("a");
+      zLink.href = zone.source_url;
+      zLink.target = "_blank";
+      zLink.rel = "noopener noreferrer";
+      zLink.textContent = "Source";
+      zLink.style.cssText =
+        "text-decoration:underline;display:block;margin-top:4px;";
+      zonePopup.append(zTitle, zDesc, zLink);
+
+      const marker = new maplibre.Marker({ element: zoneEl, anchor: "center" })
+        .setLngLat([zone.lng, zone.lat])
+        .setPopup(new maplibre.Popup({ offset: 16 }).setDOMContent(zonePopup))
+        .addTo(map);
+      hazardMarkersRef.current.push(marker);
+    });
+
     addRouteDataToMap();
 
     if (destination || routes.length > 0) {
@@ -378,6 +411,7 @@ export function useRouteLayers({
       destMarkerRef.current?.remove();
       stopMarkersRef.current.forEach((m) => m.remove());
       stepMarkerRef.current?.remove();
+      hazardMarkersRef.current.forEach((m) => m.remove());
     };
   }, []);
 
