@@ -20,6 +20,15 @@ export type SafetyEvidence = {
   mappedRiskExposure: number | null;
   sufficient: boolean;
   reasons: string[];
+  /** Kilometres of each mapped risk factor along the route (structured form of `reasons`). */
+  exposure?: {
+    unpavedKm: number;
+    roughKm: number;
+    highSpeedKm: number;
+    minorRoadKm: number;
+    /** Only counted when night-time lighting coverage was good enough to trust. */
+    unlitKm: number | null;
+  };
 };
 
 export function assessRoadConditions(
@@ -178,6 +187,13 @@ export function assessRoadConditions(
     sufficient,
     mappedRiskExposure: sufficient ? penalty / 1000 : null,
     reasons,
+    exposure: {
+      unpavedKm: unpaved / 1000,
+      roughKm: rough / 1000,
+      highSpeedKm: highSpeed / 1000,
+      minorRoadKm: minorRoads / 1000,
+      unlitKm: isNight && hasLightingCoverage ? unlit / 1000 : null,
+    },
   };
 }
 
