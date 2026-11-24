@@ -1,11 +1,17 @@
 /** Decorative coastline illustration, not geographic or routing data. */
-export function CoastalArtwork() {
+export function CoastalArtwork({
+  preserveAspectRatio = "none",
+  className = "pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-70",
+}: {
+  preserveAspectRatio?: string;
+  className?: string;
+} = {}) {
   return (
     <svg
       aria-hidden="true"
       viewBox="0 0 600 440"
-      preserveAspectRatio="xMidYMid slice"
-      className="pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-70"
+      preserveAspectRatio={preserveAspectRatio}
+      className={className}
     >
       <defs>
         <pattern
