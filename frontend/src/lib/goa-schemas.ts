@@ -84,6 +84,7 @@ export const itinerarySchema = z.object({
   stops: z
     .array(
       z.object({
+        id: z.string().optional(),
         durationMin: z.number().optional(),
         arrivalMinute: z.number().optional(),
         departureMinute: z.number().optional(),

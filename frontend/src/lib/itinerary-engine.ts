@@ -636,6 +636,124 @@ export function buildSlotPlan(input: {
 }
 
 /**
+ * Converts raw OSM kind tags to clear, human-readable wording.
+ * e.g. "place_of_worship" -> "Temple" or "Church" based on venue name.
+ */
+export function humanizeKind(place: { name?: string; kind: string }): string {
+  const name = (place.name || "").toLowerCase();
+  const kind = (place.kind || "").toLowerCase().replace(/_/g, " ").trim();
+
+  if (kind.includes("place of worship") || kind === "religion") {
+    if (
+      name.includes("church") ||
+      name.includes("cathedral") ||
+      name.includes("basilica") ||
+      name.includes("chapel") ||
+      name.includes("se cathedral")
+    ) {
+      return "Church";
+    }
+    if (
+      name.includes("temple") ||
+      name.includes("mandir") ||
+      name.includes("devasthan") ||
+      name.includes("shri") ||
+      name.includes("sansthan") ||
+      name.includes("math")
+    ) {
+      return "Temple";
+    }
+    if (name.includes("mosque") || name.includes("masjid")) {
+      return "Mosque";
+    }
+    if (name.includes("gurdwara")) {
+      return "Gurdwara";
+    }
+    return "Temple";
+  }
+  if (kind === "viewpoint") return "Viewpoint";
+  if (kind === "attraction") return "Attraction";
+  if (kind === "historic" || kind === "monument") return "Historic monument";
+  if (kind === "archaeological site") return "Archaeological site";
+  if (kind === "ruins") return "Historic ruins";
+  if (kind === "fast food") return "Quick bites";
+  if (kind === "food court") return "Food court";
+  if (kind === "water park") return "Water park";
+  if (kind === "nature reserve") return "Nature reserve";
+  if (kind === "beach") return "Beach";
+  if (kind === "fort") return "Fort";
+  if (kind === "museum") return "Museum";
+  if (kind === "restaurant") return "Restaurant";
+  if (kind === "cafe") return "Café";
+  if (kind === "bar" || kind === "pub") return "Bar";
+
+  return kind
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * Converts raw OSM cuisine tags to human-friendly cuisine text.
+ * e.g. "goan;seafood;curry" -> "Goan seafood".
+ */
+export function humanizeCuisine(raw?: string): string {
+  if (!raw) return "Local dining";
+  const parts = raw
+    .split(/[;,]+/)
+    .map((s) => s.trim().replace(/_/g, " ").toLowerCase())
+    .filter(Boolean);
+  if (!parts.length) return "Local dining";
+
+  // Filter out redundant/generic sub-tags
+  const filtered = parts.filter(
+    (p) =>
+      !(
+        p === "curry" &&
+        (parts.includes("goan") ||
+          parts.includes("indian") ||
+          parts.includes("seafood"))
+      ),
+  );
+  const terms = filtered.length > 0 ? filtered.slice(0, 2) : parts.slice(0, 1);
+
+  const formatWord = (w: string) => {
+    if (w.toLowerCase() === "cafe") return "Café";
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  };
+  const formatTerm = (t: string) => t.split(" ").map(formatWord).join(" ");
+
+  if (terms.length === 1) {
+    return formatTerm(terms[0]!);
+  }
+  if (terms[0] === "goan" && (terms[1] === "seafood" || terms[1] === "fish")) {
+    return "Goan seafood";
+  }
+  return `${formatTerm(terms[0]!)} & ${formatTerm(terms[1]!)}`;
+}
+
+/**
+ * Sanitizes any raw OSM tags or remnants in "Why this stop" descriptions.
+ */
+export function cleanWhy(why: string): string {
+  if (!why) return "";
+  let text = why;
+  text = text.replace(/\bplace_of_worship\b/gi, "Temple");
+  text = text.replace(/\bfast_food\b/gi, "quick bites");
+  text = text.replace(/goan;seafood;curry/gi, "Goan seafood");
+  text = text.replace(
+    /\b([a-z]+);([a-z]+)(;[a-z]+)*\b/gi,
+    (match) => humanizeCuisine(match),
+  );
+  text = text.replace(
+    /destination cluster highlight/gi,
+    "in the main sightseeing cluster",
+  );
+  text = text.replace(/_/g, " ");
+  return text;
+}
+
+/**
  * Pure itinerary engine planner.
  * Assembles slot-based plan with opening hours checking, cluster cohesion,
  * meal separation, and detour constraints.
@@ -664,6 +782,45 @@ export function planDay(input: PlanDayInput): PlanDayResult {
     input.destinationCandidates.filter((c) => !usedIds.has(c.id)),
     ctx,
     2.5,
+  );
+
+  const countSources = (items: { id?: string; sourceUrl?: string }[]) => {
+    let curated = 0;
+    let osm = 0;
+    for (const item of items) {
+      if (
+        item.id?.startsWith("curated/") ||
+        (item.sourceUrl && !item.sourceUrl.includes("openstreetmap.org"))
+      ) {
+        curated++;
+      } else {
+        osm++;
+      }
+    }
+    return { curated, osm, total: items.length };
+  };
+
+  // Stage 4: Candidates after open/closed filtering
+  const allPoolCandidates = [
+    ...input.destinationCandidates,
+    ...(input.corridorCandidates || []),
+  ];
+  const openCandidates = allPoolCandidates.filter((p) => {
+    return (
+      isOpenAt(p.openingHours, input.date, startMinute + 30) !== "closed" ||
+      isOpenAt(p.openingHours, input.date, startMinute + 120) !== "closed" ||
+      isOpenAt(p.openingHours, input.date, startMinute + 240) !== "closed"
+    );
+  });
+  const stage4 = countSources(openCandidates);
+  console.log(
+    `[itinerary] Stage 4 (after open/closed filtering): total=${stage4.total} (curated: ${stage4.curated}, OSM: ${stage4.osm})`,
+  );
+
+  // Stage 5: Candidates after cluster selection
+  const stage5 = countSources(clusterPool);
+  console.log(
+    `[itinerary] Stage 5 (after cluster selection): total=${stage5.total} (curated: ${stage5.curated}, OSM: ${stage5.osm})`,
   );
 
   const slots = buildSlotPlan({
@@ -928,14 +1085,14 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       slot: slotDef.slot,
       why:
         matchSelected?.place.id === selected?.placeId && selected?.why
-          ? selected.why.slice(0, 160)
+          ? cleanWhy(selected.why.slice(0, 160))
           : slotDef.slot === "en-route"
-            ? `${chosen.place.kind} · ${chosen.detourMin} min detour from route`
+            ? `${humanizeKind(chosen.place)} · ${chosen.detourMin} min detour from route`
             : slotDef.slot === "sunset"
-              ? `${chosen.place.kind} · ideal for sunset before dark`
+              ? `${humanizeKind(chosen.place)} · ideal for sunset before dark`
               : slotDef.slot === "meal"
-                ? `${chosen.place.cuisine || "Local dining"} · nearby meal stop`
-                : `${chosen.place.kind} · destination cluster highlight`,
+                ? `${humanizeCuisine(chosen.place.cuisine)} · ${slotDef.id.includes("lunch") ? "lunchtime stop" : slotDef.id.includes("breakfast") ? "breakfast stop" : "nearby meal stop"}`
+                : `${humanizeKind(chosen.place)} · in the main sightseeing cluster`,
       openStatus: chosen.openStatus === "unknown" ? "unknown" : "open",
       detourMin: chosen.detourMin,
     });

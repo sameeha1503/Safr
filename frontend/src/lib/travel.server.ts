@@ -22,6 +22,9 @@ import {
   isOpenAt,
   scoreCandidate,
   sunsetMinutes,
+  humanizeKind,
+  humanizeCuisine,
+  cleanWhy,
 } from "./itinerary-engine";
 import { scheduleItinerary, formatPlanTime } from "./itinerary-planner";
 import { CURATED_GOA_PLACES } from "./goa-places-data";
@@ -158,6 +161,34 @@ export async function buildItinerary(
     ...curatedNear.filter((p) => !existingIds.has(p.id)),
   ];
 
+  const countSources = (items: { id?: string; sourceUrl?: string }[]) => {
+    let curated = 0;
+    let osm = 0;
+    for (const item of items) {
+      if (
+        item.id?.startsWith("curated/") ||
+        (item.sourceUrl && !item.sourceUrl.includes("openstreetmap.org"))
+      ) {
+        curated++;
+      } else {
+        osm++;
+      }
+    }
+    return { curated, osm, total: items.length };
+  };
+
+  // Stage 1: after Overpass parsing
+  const stage1 = countSources([...destPlaces, ...corridorCandidates]);
+  console.log(
+    `[itinerary] Stage 1 (after Overpass parsing): total=${stage1.total} (curated: ${stage1.curated}, OSM: ${stage1.osm})`,
+  );
+
+  // Stage 2: after merging curated places
+  const stage2 = countSources(places);
+  console.log(
+    `[itinerary] Stage 2 (after merging curated places): total=${stage2.total} (curated: ${stage2.curated}, OSM: ${stage2.osm})`,
+  );
+
   // 1. Prioritize user notes (specific desired works, attractions or activities)
   const notesLower = (input.notes || "").toLowerCase();
   const noteMatchedPlaces: NearbyPlace[] = [];
@@ -248,6 +279,12 @@ export async function buildItinerary(
     if (candidates.length >= 20) break;
     addCandidate(p);
   }
+
+  // Stage 3: after interest filtering
+  const stage3 = countSources(candidates);
+  console.log(
+    `[itinerary] Stage 3 (after interest filtering): total=${stage3.total} (curated: ${stage3.curated}, OSM: ${stage3.osm})`,
+  );
 
   if (!candidates.length)
     throw new Error(
@@ -343,8 +380,8 @@ export async function buildItinerary(
         id: c.place.id,
         name: c.place.name,
         category: c.place.category,
-        kind: c.place.kind,
-        cuisine: c.place.cuisine,
+        kind: humanizeKind(c.place),
+        cuisine: humanizeCuisine(c.place.cuisine),
         highlight: c.place.highlight,
         distanceKm: Math.round(c.place.distanceKm * 10) / 10,
         detourMin: c.detourMin,
@@ -529,6 +566,12 @@ export async function buildItinerary(
           ...matrix,
           preferredIds,
         });
+
+  // Stage 6: final stops
+  const stage6 = countSources(schedule.stops);
+  console.log(
+    `[itinerary] Stage 6 (final stops): total=${stage6.total} (curated: ${stage6.curated}, OSM: ${stage6.osm})`,
+  );
 
   if (!schedule.stops.length)
     throw new Error(

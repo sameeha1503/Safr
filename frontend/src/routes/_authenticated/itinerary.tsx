@@ -35,7 +35,7 @@ import { GOA_PLACES, type Itinerary } from "@/lib/goa-schemas";
 import { generateItinerary, getCurrentArea } from "@/lib/goa.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { itineraryMapHandoff, parseSavedItinerary } from "@/lib/itinerary-map";
-import { itineraryMode } from "@/lib/itinerary-engine";
+import { itineraryMode, cleanWhy } from "@/lib/itinerary-engine";
 
 export const Route = createFileRoute("/_authenticated/itinerary")({
   validateSearch: (
@@ -991,7 +991,7 @@ function ItineraryPage() {
                     {stop.why && (
                       <p className="mt-2 text-xs font-medium text-primary/90 bg-primary/5 px-2.5 py-1 rounded-lg w-fit">
                         💡 <span className="font-semibold">Why this stop:</span>{" "}
-                        {stop.why}
+                        {cleanWhy(stop.why)}
                       </p>
                     )}
 

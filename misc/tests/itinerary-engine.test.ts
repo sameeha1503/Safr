@@ -8,6 +8,9 @@ import {
   findBestCluster,
   buildSlotPlan,
   planDay,
+  humanizeKind,
+  humanizeCuisine,
+  cleanWhy,
 } from "../../frontend/src/lib/itinerary-engine.ts";
 import { itinerarySchema } from "../../frontend/src/lib/goa-schemas.ts";
 import { nearbyPlacesWithMeta } from "../../frontend/src/lib/places.server.ts";
@@ -572,4 +575,29 @@ test("buildItinerary sets slot on all stops, confines food to meal windows, and 
       }
     }
   }
+});
+
+test("humanizeKind, humanizeCuisine, and cleanWhy convert raw OSM tags to human wording", () => {
+  // humanizeKind
+  assert.equal(humanizeKind({ name: "Shri Mahamaya Temple", kind: "place_of_worship" }), "Temple");
+  assert.equal(humanizeKind({ name: "Se Cathedral", kind: "place_of_worship" }), "Church");
+  assert.equal(humanizeKind({ name: "Jama Masjid", kind: "place_of_worship" }), "Mosque");
+  assert.equal(humanizeKind({ name: "Chapora Fort", kind: "fort" }), "Fort");
+  assert.equal(humanizeKind({ name: "Burger Express", kind: "fast_food" }), "Quick bites");
+
+  // humanizeCuisine
+  assert.equal(humanizeCuisine("goan;seafood;curry"), "Goan seafood");
+  assert.equal(humanizeCuisine("north_indian;chinese"), "North Indian & Chinese");
+  assert.equal(humanizeCuisine(undefined), "Local dining");
+
+  // cleanWhy
+  assert.equal(
+    cleanWhy("place_of_worship · in the main sightseeing cluster"),
+    "Temple · in the main sightseeing cluster",
+  );
+  assert.equal(cleanWhy("goan;seafood;curry · lunchtime stop"), "Goan seafood · lunchtime stop");
+  assert.equal(
+    cleanWhy("Temple · destination cluster highlight"),
+    "Temple · in the main sightseeing cluster",
+  );
 });

@@ -252,12 +252,23 @@ export async function nearbyPlacesWithMeta(
   const query = `[out:json][timeout:9];(${placeFilters
     .map(([key, values]) => `nwr["${key}"~"^(${values})$"]["name"](${around});`)
     .join("")});out center tags 500;`;
+  const fetchStart = Date.now();
   let rawResult: unknown;
   // A failed or partial provider answer must not be remembered as the real answer.
   let degraded = false;
+  let fetchFailed = false;
+  let fetchTimedOut = false;
   try {
     rawResult = await fetchOverpass(query);
   } catch (err) {
+    fetchFailed = true;
+    if (
+      err instanceof Error &&
+      (err.name === "TimeoutError" ||
+        err.message.toLowerCase().includes("timeout"))
+    ) {
+      fetchTimedOut = true;
+    }
     if (curatedMatches.length > 0) {
       degraded = true;
       console.warn(
@@ -268,12 +279,29 @@ export async function nearbyPlacesWithMeta(
       throw err;
     }
   }
+  const fetchDurationMs = Date.now() - fetchStart;
 
   const result = overpassSchema.parse(rawResult);
   if (result.remark && curatedMatches.length === 0) {
     throw new Error("Nearby-place lookup is busy. Please try again shortly.");
   }
   if (result.remark) degraded = true;
+
+  const rawElementsCount = Array.isArray(result.elements)
+    ? result.elements.length
+    : 0;
+  const statusStr = fetchFailed
+    ? fetchTimedOut
+      ? "timed out"
+      : "failed"
+    : "success";
+
+  console.log(
+    `[nearbyPlacesWithMeta] (a) Overpass fetch took ${fetchDurationMs} ms (status: ${statusStr})`,
+  );
+  console.log(
+    `[nearbyPlacesWithMeta] (b) Raw OSM elements returned: ${rawElementsCount}`,
+  );
 
   const seen = new Map<string, Coordinate[]>();
   const places: NearbyPlace[] = [];
@@ -342,6 +370,11 @@ export async function nearbyPlacesWithMeta(
       places.push(c);
     }
   }
+  const parsedOsm = places.filter((p) => !p.id.startsWith("curated/"));
+  const parsedCurated = places.filter((p) => p.id.startsWith("curated/"));
+  console.log(
+    `[nearbyPlacesWithMeta] (c) Candidates after Overpass parsing: total=${places.length} (curated: ${parsedCurated.length}, OSM: ${parsedOsm.length})`,
+  );
   places.sort((a, b) => a.distanceKm - b.distanceKm);
   if (!degraded) await setCached(`nearby:${key}`, places, 86400);
   return { places, degraded };
