@@ -182,6 +182,9 @@ export async function fetchOverpass(query: string): Promise<unknown> {
       /* Try the configured mirror before the caller's curated fallback. */
     }
   }
+  console.error(
+    `[places] All Overpass endpoints failed for query (first 100 chars): ${query.slice(0, 100)}`,
+  );
   throw new Error("Nearby-place providers are temporarily unavailable.");
 }
 
@@ -471,7 +474,11 @@ export async function nearbyEssentials(
     }
     await setCached(key, items, 86400);
     return items;
-  } catch {
+  } catch (err) {
+    console.error(
+      "[places] nearbyEssentials failed:",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }

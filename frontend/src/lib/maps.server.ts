@@ -422,7 +422,11 @@ export async function computeSafeRoutes(
         .parse(await fetchJson(overpass.toString(), {}, 16000));
       if (!data.remark) ways = data.elements;
     }
-  } catch {
+  } catch (err) {
+    console.error(
+      "[routing] Overpass road-tags lookup failed:",
+      err instanceof Error ? err.message : err,
+    );
     /* Never substitute fabricated safety scores for missing map data. */
   }
   const candidates = unique.map((r) =>
