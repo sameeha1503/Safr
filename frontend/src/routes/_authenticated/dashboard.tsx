@@ -89,9 +89,54 @@ function Dashboard() {
           </span>
         </div>
 
-        {/* Travel notes card: directly below The Goa edition and above hero heading */}
+        <section className="py-7 sm:py-10" aria-labelledby="dashboard-heading">
+          <p className="mb-3 text-sm text-muted-foreground">
+            {trip?.traveller_name
+              ? `Make it your kind of trip, ${trip.traveller_name}.`
+              : "A change of scene starts here."}
+          </p>
+          <h2
+            id="dashboard-heading"
+            className="max-w-xl font-display text-[clamp(2.8rem,7vw,4.6rem)] leading-[1.04] tracking-[-0.045em]"
+          >
+            Go a little further.
+            <br />
+            <span className="italic text-primary">Stay a little longer.</span>
+          </h2>
+        </section>
+
+        {/* Full-width Scenic Way Banner */}
+        <Link
+          to="/map"
+          className="group relative isolate mb-8 flex min-h-[260px] w-full flex-col justify-between overflow-hidden rounded-2xl bg-[#123f3b] p-6 text-[#fff9eb] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-primary sm:min-h-[320px] sm:rounded-3xl sm:p-8 lg:h-[360px]"
+        >
+          <CoastalArtwork />
+          <div className="relative flex items-center justify-between">
+            <span className="text-xs uppercase tracking-[0.2em]">
+              Take the scenic way
+            </span>
+            <Compass className="size-6 opacity-80" aria-hidden="true" />
+          </div>
+          <div className="relative max-w-md pt-6 sm:pt-10">
+            <h3 className="font-display text-[2rem] leading-[1.05] sm:text-[2.5rem]">
+              Less searching.
+              <br />
+              More exploring.
+            </h3>
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-[#e2ece5] sm:max-w-sm">
+              Find a place, trace your route, and see where the day takes
+              you.
+            </p>
+            <span className="mt-5 inline-flex min-h-11 items-center gap-4 border-b border-white/60 pb-1 text-sm font-semibold sm:mt-6 sm:gap-5">
+              Open your map{" "}
+              <ArrowUpRight className="size-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1 motion-reduce:transform-none" />
+            </span>
+          </div>
+        </Link>
+
+        {/* Travel notes card: placed under Take the scenic way */}
         <section
-          className="relative mt-6 mb-7 border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
+          className="relative mb-8 border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
           aria-labelledby="trip-heading"
         >
           <div className="mb-5 flex items-center justify-between">
@@ -177,50 +222,6 @@ function Dashboard() {
             </>
           )}
         </section>
-        <section className="py-7 sm:py-10" aria-labelledby="dashboard-heading">
-          <p className="mb-3 text-sm text-muted-foreground">
-            {trip?.traveller_name
-              ? `Make it your kind of trip, ${trip.traveller_name}.`
-              : "A change of scene starts here."}
-          </p>
-          <h2
-            id="dashboard-heading"
-            className="max-w-xl font-display text-[clamp(2.8rem,7vw,4.6rem)] leading-[1.04] tracking-[-0.045em]"
-          >
-            Go a little further.
-            <br />
-            <span className="italic text-primary">Stay a little longer.</span>
-          </h2>
-        </section>
-
-        {/* Full-width Scenic Way Banner */}
-        <Link
-          to="/map"
-          className="group relative isolate mb-8 flex min-h-[260px] w-full flex-col justify-between overflow-hidden rounded-2xl bg-[#123f3b] p-6 text-[#fff9eb] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-primary sm:min-h-[320px] sm:rounded-3xl sm:p-8 lg:h-[360px]"
-        >
-          <CoastalArtwork />
-          <div className="relative flex items-center justify-between">
-            <span className="text-xs uppercase tracking-[0.2em]">
-              Take the scenic way
-            </span>
-            <Compass className="size-6 opacity-80" aria-hidden="true" />
-          </div>
-          <div className="relative max-w-md pt-6 sm:pt-10">
-            <h3 className="font-display text-[2rem] leading-[1.05] sm:text-[2.5rem]">
-              Less searching.
-              <br />
-              More exploring.
-            </h3>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-[#e2ece5] sm:max-w-sm">
-              Find a place, trace your route, and see where the day takes
-              you.
-            </p>
-            <span className="mt-5 inline-flex min-h-11 items-center gap-4 border-b border-white/60 pb-1 text-sm font-semibold sm:mt-6 sm:gap-5">
-              Open your map{" "}
-              <ArrowUpRight className="size-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1 motion-reduce:transform-none" />
-            </span>
-          </div>
-        </Link>
 
         {/* Lower section layout */}
         <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
