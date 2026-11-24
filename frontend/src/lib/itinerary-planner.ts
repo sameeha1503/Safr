@@ -23,7 +23,7 @@ export interface PlanStop {
   transitMin?: number;
   sourceUrl?: string;
   crowdLevel?: "low" | "moderate" | "high";
-  slot?: "en-route" | "main" | "meal" | "sunset";
+  slot?: "en-route" | "main" | "meal" | "sunset" | "arrive";
   why?: string;
   openStatus?: "open" | "unknown";
   detourMin?: number;

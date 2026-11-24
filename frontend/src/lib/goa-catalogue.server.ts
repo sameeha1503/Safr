@@ -30,7 +30,7 @@ export function matchesCatalogueInterest(
 ): boolean {
   if (tags["amenity"] && AMENITY_REGEX.test(tags["amenity"])) return true;
   if (tags["tourism"] && TOURISM_REGEX.test(tags["tourism"])) return true;
-  if (tags["historic"] && HISTORIC_REGEX.test(tags["historic"])) return true;
+  if (tags["historic"]) return true;
   if (tags["natural"] && NATURAL_REGEX.test(tags["natural"])) return true;
   if (tags["leisure"] && LEISURE_REGEX.test(tags["leisure"])) return true;
   return false;

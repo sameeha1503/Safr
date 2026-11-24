@@ -14,6 +14,7 @@ import {
 } from "../../frontend/src/lib/itinerary-engine.ts";
 import { itinerarySchema } from "../../frontend/src/lib/goa-schemas.ts";
 import { nearbyPlacesWithMeta } from "../../frontend/src/lib/places.server.ts";
+import { getLoadedCataloguePlaces } from "../../frontend/src/lib/goa-catalogue.server.ts";
 import { buildItinerary } from "../../frontend/src/lib/travel.server.ts";
 import type { NearbyPlace } from "../../frontend/src/lib/geo.ts";
 import { distanceKm } from "../../frontend/src/lib/geo.ts";
@@ -541,7 +542,8 @@ test("buildItinerary sets slot on all stops, confines food to meal windows, and 
       stop.slot === "main" ||
         stop.slot === "meal" ||
         stop.slot === "sunset" ||
-        stop.slot === "en-route",
+        stop.slot === "en-route" ||
+        stop.slot === "arrive",
       `Stop "${stop.title}" must have slot set, got ${stop.slot}`,
     );
   }
@@ -690,5 +692,149 @@ test("buildItinerary uses catalogue as primary source when Overpass is down (deg
         source: s.source,
       })),
     )}`,
+  );
+});
+
+test("Vagator/Anjuna: all attraction/viewpoint/beach/historic places reach scoring and shortlist is sorted by score", async (t) => {
+  const center = { lat: 15.6059, lng: 73.7388 }; // Chapora Fort / Vagator
+  const radiusKm = 5;
+
+  const rawPlaces = getLoadedCataloguePlaces();
+  const NON_SCHEDULABLE =
+    /^(hotel|guest_house|hostel|apartment|motel|bank|school|clinic|fuel|parking)$/i;
+
+  const groundTruthTargets = rawPlaces.filter((p) => {
+    const d = distanceKm(center, { lat: p.lat, lng: p.lng });
+    if (d > radiusKm) return false;
+    const tags = p.tags || {};
+    if (
+      NON_SCHEDULABLE.test(tags["tourism"] || "") ||
+      NON_SCHEDULABLE.test(tags["amenity"] || "") ||
+      NON_SCHEDULABLE.test(tags["building"] || "")
+    ) {
+      return false;
+    }
+    return (
+      tags["tourism"] === "attraction" ||
+      tags["tourism"] === "viewpoint" ||
+      tags["natural"] === "beach" ||
+      Boolean(tags["historic"])
+    );
+  });
+
+  assert.equal(
+    groundTruthTargets.length,
+    33,
+    "Expected exactly 33 target places in the 5km radius from JSON ground truth",
+  );
+
+  const { places } = await nearbyPlacesWithMeta(center, radiusKm);
+  assert.ok(
+    places.length > 500,
+    `Expected catalogue to not be capped at 500, got ${places.length}`,
+  );
+
+  // Every single target place from the JSON reaches the scoring step (places pool)
+  for (const target of groundTruthTargets) {
+    const found = places.some(
+      (p) =>
+        p.name.toLowerCase() === (target.tags["name"] || "").toLowerCase() ||
+        distanceKm(p, { lat: target.lat, lng: target.lng }) < 0.2,
+    );
+    assert.ok(
+      found,
+      `Target "${target.tags["name"]}" (${target.id}) must reach the scoring pool`,
+    );
+  }
+
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const urlStr = String(url);
+    if (urlStr.includes("photon.komoot.io")) {
+      return Response.json({
+        features: [
+          {
+            properties: {
+              osm_id: 1,
+              osm_type: "node",
+              name: "Chapora Fort",
+              state: "Goa",
+              countrycode: "in",
+            },
+            geometry: { coordinates: [73.7388, 15.6059] },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("/table/")) {
+      const match = urlStr.match(/driving\/([^?]+)/);
+      const count = match ? match[1].split(";").length : 10;
+      const durations = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 300 + Math.abs(i - j) * 60,
+        ),
+      );
+      const distances = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 800 + Math.abs(i - j) * 200,
+        ),
+      );
+      return Response.json({
+        code: "Ok",
+        durations,
+        distances,
+        sources: Array.from({ length: count }, () => ({ distance: 10 })),
+      });
+    }
+    return Response.json({});
+  });
+
+  const plan = await buildItinerary({
+    place: "Chapora Fort",
+    state: "Goa",
+    start: { lat: 15.4989, lng: 73.8278, name: "Panjim" },
+    destination: { lat: 15.6059, lng: 73.7388, name: "Chapora Fort" },
+    hours: 8,
+    startTime: "09:00",
+    date: "2026-11-24",
+    pace: "balanced",
+    interests: ["History & heritage", "Beaches & sunsets", "Local food"],
+    returnToStart: false,
+  });
+
+  // Verify destination appears exactly once and is labelled slot "arrive"
+  const arriveStops = plan.stops.filter((s) => s.slot === "arrive");
+  assert.equal(
+    arriveStops.length,
+    1,
+    "Destination must appear exactly once with slot 'arrive'",
+  );
+  assert.equal(arriveStops[0]!.title, "Chapora Fort");
+  const otherChaporaStops = plan.stops.filter(
+    (s) => s !== arriveStops[0] && s.title === "Chapora Fort",
+  );
+  assert.equal(
+    otherChaporaStops.length,
+    0,
+    "Chapora Fort must not appear as any other stop",
+  );
+
+  // Verify shortlist is sorted by score (not by id)
+  const scoreCtx = {
+    interests: ["History & heritage", "Beaches & sunsets", "Local food"],
+    center,
+  };
+  const scored = places
+    .filter((p) => p.category !== "hotel")
+    .map((p) => ({ id: p.id, score: scoreCandidate(p, scoreCtx) }))
+    .sort((a, b) => b.score - a.score);
+
+  // Top candidates should not be sorted by id (e.g. node/108..., node/109...)
+  const top10 = scored.slice(0, 10);
+  const idsInScoreOrder = top10.map((x) => x.id);
+  const idsSortedAlpha = [...idsInScoreOrder].sort();
+  assert.notDeepEqual(
+    idsInScoreOrder,
+    idsSortedAlpha,
+    "Shortlist must be sorted by score, not by id",
   );
 });

@@ -100,7 +100,9 @@ export const itinerarySchema = z.object({
         crowdLevel: z.enum(["low", "moderate", "high"]).optional(),
         distanceKm: z.number().optional(),
         transitMin: z.number().optional(),
-        slot: z.enum(["en-route", "main", "meal", "sunset"]).optional(),
+        slot: z
+          .enum(["en-route", "main", "meal", "sunset", "arrive"])
+          .optional(),
         why: z.string().optional(),
         openStatus: z.enum(["open", "unknown"]).optional(),
         detourMin: z.number().optional(),

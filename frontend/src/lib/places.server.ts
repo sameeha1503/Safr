@@ -363,6 +363,19 @@ export async function nearbyPlacesWithMeta(
             tags["leisure"] ||
             tags["amenity"] ||
             "place";
+
+      const NON_SCHEDULABLE_KINDS =
+        /^(hotel|guest_house|hostel|apartment|motel|bank|school|clinic|fuel|parking)$/i;
+      if (
+        NON_SCHEDULABLE_KINDS.test(tags["tourism"] || "") ||
+        NON_SCHEDULABLE_KINDS.test(tags["amenity"] || "") ||
+        NON_SCHEDULABLE_KINDS.test(tags["building"] || "") ||
+        NON_SCHEDULABLE_KINDS.test(kind) ||
+        category === "hotel"
+      ) {
+        continue;
+      }
+
       places.push({
         ...point,
         id: `${item.type}/${item.id}`,
@@ -379,7 +392,8 @@ export async function nearbyPlacesWithMeta(
         hasWebsite: Boolean(tags["website"] || tags["contact:website"]),
         source: elementSource,
       });
-      if (places.length >= 500) break;
+      const maxCap = elementSource === "catalogue" ? 5000 : 500;
+      if (places.length >= maxCap) break;
     }
   } else if (curatedMatches.length > 0) {
     // When Overpass returns 0 elements or failed, use curated landmark database
@@ -395,9 +409,11 @@ export async function nearbyPlacesWithMeta(
   const parsedCurated = places.filter(
     (p) => p.source === "curated" || p.id.startsWith("curated/"),
   );
-  console.log(
-    `[nearbyPlacesWithMeta] Candidates parsed: total=${places.length} (catalogue: ${parsedCatalogue.length}, Overpass: ${parsedOsm.length}, curated: ${parsedCurated.length})`,
-  );
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[nearbyPlacesWithMeta] Candidates parsed: total=${places.length} (catalogue: ${parsedCatalogue.length}, Overpass: ${parsedOsm.length}, curated: ${parsedCurated.length})`,
+    );
+  }
   places.sort((a, b) => a.distanceKm - b.distanceKm);
   if (!degraded) await setCached(`nearby:${key}`, places, 86400);
   return { places, degraded };

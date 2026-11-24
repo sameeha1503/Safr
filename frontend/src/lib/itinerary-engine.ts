@@ -12,7 +12,7 @@ export interface CandidateScoreContext {
 
 export interface SlotDefinition {
   id: string;
-  slot: "en-route" | "main" | "meal" | "sunset";
+  slot: "en-route" | "main" | "meal" | "sunset" | "arrive";
   targetTimeMin: number;
   windowStartMin: number;
   windowEndMin: number;
@@ -538,7 +538,18 @@ export function buildSlotPlan(input: {
     currentMin = Math.max(currentMin, 480) + 40;
   }
 
-  // 3. Morning main stops (fill time before lunch)
+  // 3. Destination arrival stop (appears exactly once, slot "arrive")
+  slots.push({
+    id: "destination-arrive",
+    slot: "arrive",
+    targetTimeMin: currentMin,
+    windowStartMin: startMin,
+    windowEndMin: endMin,
+    durationMin: visitDuration,
+  });
+  currentMin += visitDuration + 10;
+
+  // 4. Morning main stops (fill time before lunch)
   const lunchWindowStart = 720; // 12:00
   const hasLunch = startMin < 840 && endMin >= 750;
   const morningCutoff = hasLunch
@@ -621,11 +632,11 @@ export function buildSlotPlan(input: {
     }
   }
 
-  // Ensure at least one main slot if no slots were added
+  // Ensure at least destination arrival slot if no slots were added
   if (slots.length === 0) {
     slots.push({
-      id: "main-primary",
-      slot: "main",
+      id: "destination-arrive",
+      slot: "arrive",
       targetTimeMin: startMin,
       windowStartMin: startMin,
       windowEndMin: endMin,
@@ -823,15 +834,19 @@ export function planDay(input: PlanDayInput): PlanDayResult {
     );
   });
   const stage4 = countSources(openCandidates);
-  console.log(
-    `[itinerary] Stage 4 (after open/closed filtering): total=${stage4.total} (catalogue: ${stage4.catalogue}, curated: ${stage4.curated}, OSM: ${stage4.osm})`,
-  );
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 4 (after open/closed filtering): total=${stage4.total} (catalogue: ${stage4.catalogue}, curated: ${stage4.curated}, OSM: ${stage4.osm})`,
+    );
+  }
 
   // Stage 5: Candidates after cluster selection
   const stage5 = countSources(clusterPool);
-  console.log(
-    `[itinerary] Stage 5 (after cluster selection): total=${stage5.total} (catalogue: ${stage5.catalogue}, curated: ${stage5.curated}, OSM: ${stage5.osm})`,
-  );
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 5 (after cluster selection): total=${stage5.total} (catalogue: ${stage5.catalogue}, curated: ${stage5.curated}, OSM: ${stage5.osm})`,
+    );
+  }
 
   const slots = buildSlotPlan({
     mode: input.mode,
@@ -852,14 +867,57 @@ export function planDay(input: PlanDayInput): PlanDayResult {
 
     // Pick candidate pool for this slot
     let pool: NearbyPlace[] = [];
-    if (slotDef.slot === "en-route") {
+    if (slotDef.slot === "arrive") {
+      const destName = (input.destination.name || "").toLowerCase().trim();
+      const destCandidate = input.destinationCandidates.find((c) => {
+        if (
+          c.category === "restaurant" ||
+          [
+            "restaurant",
+            "cafe",
+            "fast_food",
+            "food_court",
+            "bar",
+            "pub",
+          ].includes(c.kind)
+        ) {
+          return false;
+        }
+        const cName = c.name.toLowerCase().trim();
+        if (
+          destName &&
+          (cName === destName ||
+            cName.includes(destName) ||
+            destName.includes(cName))
+        ) {
+          return true;
+        }
+        return distanceKm(c, input.destination) < 0.3;
+      });
+      pool = destCandidate
+        ? [destCandidate]
+        : [
+            {
+              id: `destination/${encodeURIComponent(destName || "anchor")}`,
+              name: input.destination.name || "Destination",
+              lat: input.destination.lat,
+              lng: input.destination.lng,
+              category: "attraction" as const,
+              kind: "attraction",
+              distanceKm: 0,
+              sourceUrl: "https://www.openstreetmap.org",
+              source: "curated" as const,
+            },
+          ];
+    } else if (slotDef.slot === "en-route") {
       pool = (input.corridorCandidates || []).filter(
         (p) =>
           !usedIds.has(p.id) &&
           p.category !== "hotel" &&
           p.category !== "restaurant" &&
           !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
-          (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5),
+          (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5) &&
+          distanceKm(p, input.destination) >= 3.0,
       );
     } else if (slotDef.slot === "meal") {
       // Meal candidates: strictly restaurant/cafe, prefer within ~2 km of previousCoords
@@ -1107,13 +1165,15 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       why:
         matchSelected?.place.id === selected?.placeId && selected?.why
           ? cleanWhy(selected.why.slice(0, 160))
-          : slotDef.slot === "en-route"
-            ? `${humanizeKind(chosen.place)} · ${chosen.detourMin} min detour from route`
-            : slotDef.slot === "sunset"
-              ? `${humanizeKind(chosen.place)} · ideal for sunset before dark`
-              : slotDef.slot === "meal"
-                ? `${humanizeCuisine(chosen.place.cuisine)} · ${slotDef.id.includes("lunch") ? "lunchtime stop" : slotDef.id.includes("breakfast") ? "breakfast stop" : "nearby meal stop"}`
-                : `${humanizeKind(chosen.place)} · in the main sightseeing cluster`,
+          : slotDef.slot === "arrive"
+            ? `${humanizeKind(chosen.place)} · destination highlight`
+            : slotDef.slot === "en-route"
+              ? `${humanizeKind(chosen.place)} · ${chosen.detourMin} min detour from route`
+              : slotDef.slot === "sunset"
+                ? `${humanizeKind(chosen.place)} · ideal for sunset before dark`
+                : slotDef.slot === "meal"
+                  ? `${humanizeCuisine(chosen.place.cuisine)} · ${slotDef.id.includes("lunch") ? "lunchtime stop" : slotDef.id.includes("breakfast") ? "breakfast stop" : "nearby meal stop"}`
+                  : `${humanizeKind(chosen.place)} · in the main sightseeing cluster`,
       openStatus: chosen.openStatus === "unknown" ? "unknown" : "open",
       detourMin: chosen.detourMin,
       source:
