@@ -524,11 +524,11 @@ export async function buildItinerary(
     dayPlan.stops.length > 0
       ? dayPlan
       : scheduleItinerary({
-        ...input,
-        candidates,
-        ...matrix,
-        preferredIds,
-      });
+          ...input,
+          candidates,
+          ...matrix,
+          preferredIds,
+        });
 
   if (!schedule.stops.length)
     throw new Error(
@@ -569,7 +569,10 @@ export async function buildItinerary(
       if (stop.arrivalMinute != null && stop.arrivalMinute > darkThreshold) {
         arriveAfterDark = true;
       }
-      if (stop.departureMinute != null && stop.departureMinute > darkThreshold) {
+      if (
+        stop.departureMinute != null &&
+        stop.departureMinute > darkThreshold
+      ) {
         arriveAfterDark = true;
       }
     }
@@ -704,11 +707,11 @@ export async function loadPlaceInsights(place: string) {
         `${curated?.kind || "Place"} in ${base.name}, ${base.state}.`,
       curated: curated
         ? {
-          highlight: curated.highlight,
-          bestTime: curated.bestTime,
-          interests: curated.interests,
-          kind: curated.kind,
-        }
+            highlight: curated.highlight,
+            bestTime: curated.bestTime,
+            interests: curated.interests,
+            kind: curated.kind,
+          }
         : undefined,
       seasonNotes: curated?.seasonNotes,
       rules: ruleSet?.rules,
@@ -716,12 +719,12 @@ export async function loadPlaceInsights(place: string) {
       wikipedia: wikipedia || undefined,
       media: wikipedia?.imageUrl
         ? {
-          imageUrl: wikipedia.imageUrl,
-          credit: {
-            label: "Wikipedia / Wikimedia — view image attribution",
-            url: wikipedia.pageUrl,
-          },
-        }
+            imageUrl: wikipedia.imageUrl,
+            credit: {
+              label: "Wikipedia / Wikimedia — view image attribution",
+              url: wikipedia.pageUrl,
+            },
+          }
         : undefined,
       eat: [],
       activities: [],
@@ -749,7 +752,7 @@ export async function loadPlaceNearby(base: {
         !places.some(
           (place) =>
             normalizePlaceName(place.name) ===
-            normalizePlaceName(curated.name) &&
+              normalizePlaceName(curated.name) &&
             distanceKm(place, curated) < 0.3,
         )
       ) {

@@ -445,11 +445,23 @@ export function findBestCluster(
 ): NearbyPlace[] {
   if (candidates.length <= 1) return [...candidates];
 
+  // Candidates for main cluster should prefer non-restaurant attractions
+  const nonFood = candidates.filter(
+    (c) =>
+      c.category !== "restaurant" &&
+      !["restaurant", "cafe", "fast_food"].includes(c.kind) &&
+      c.category !== "hotel",
+  );
+  const poolToCluster =
+    nonFood.length >= 2
+      ? nonFood
+      : candidates.filter((c) => c.category !== "hotel");
+
   let bestCluster: NearbyPlace[] = [];
   let bestScore = -Infinity;
 
-  for (const center of candidates) {
-    const cluster = candidates.filter(
+  for (const center of poolToCluster) {
+    const cluster = poolToCluster.filter(
       (c) => distanceKm(center, c) <= maxDistanceKm,
     );
     const clusterScore = cluster.reduce(
@@ -525,23 +537,29 @@ export function buildSlotPlan(input: {
     currentMin = Math.max(currentMin, 480) + 40;
   }
 
-  // 3. Arrive / Main stops in destination cluster
-  // Add main slot before lunch if time permits
-  if (currentMin + visitDuration <= 720) {
+  // 3. Morning main stops (fill time before lunch)
+  const lunchWindowStart = 720; // 12:00
+  const hasLunch = startMin < 840 && endMin >= 750;
+  const morningCutoff = hasLunch
+    ? lunchWindowStart
+    : Math.min(endMin, sunset - 60);
+
+  let morningSlotCount = 1;
+  while (currentMin + visitDuration <= morningCutoff) {
     slots.push({
-      id: "main-morning",
+      id: `main-morning-${morningSlotCount++}`,
       slot: "main",
       targetTimeMin: currentMin,
-      windowStartMin: currentMin,
-      windowEndMin: 720,
+      windowStartMin: startMin,
+      windowEndMin: morningCutoff,
       durationMin: visitDuration,
     });
     currentMin += visitDuration + 10;
   }
 
   // 4. Lunch check: window 12:00–14:30 (720–870 min)
-  if (startMin < 840 && endMin >= 750 && currentMin <= 840) {
-    const lunchTarget = Math.max(currentMin, 750); // 12:30 or current
+  if (hasLunch && currentMin <= 840) {
+    const lunchTarget = Math.max(currentMin, 720); // 12:00 or current
     if (lunchTarget <= 840) {
       slots.push({
         id: "meal-lunch",
@@ -556,13 +574,15 @@ export function buildSlotPlan(input: {
   }
 
   // 5. Afternoon main stops
-  while (currentMin + visitDuration <= Math.min(endMin, sunset - 60)) {
+  let afternoonSlotCount = 1;
+  const afternoonCutoff = Math.min(endMin, sunset - 60);
+  while (currentMin + visitDuration <= afternoonCutoff) {
     slots.push({
-      id: `main-afternoon-${slots.length + 1}`,
+      id: `main-afternoon-${afternoonSlotCount++}`,
       slot: "main",
       targetTimeMin: currentMin,
-      windowStartMin: currentMin,
-      windowEndMin: currentMin + visitDuration + 30,
+      windowStartMin: startMin,
+      windowEndMin: Math.min(endMin, sunset - 30),
       durationMin: visitDuration,
     });
     currentMin += visitDuration + 10;
@@ -670,22 +690,30 @@ export function planDay(input: PlanDayInput): PlanDayResult {
         (p) =>
           !usedIds.has(p.id) &&
           p.category !== "hotel" &&
+          p.category !== "restaurant" &&
+          !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
           (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5),
       );
     } else if (slotDef.slot === "meal") {
-      // Meal candidates: restaurant/cafe, prefer within ~2 km of previousCoords
-      pool = input.destinationCandidates.filter(
-        (p) =>
-          !usedIds.has(p.id) &&
-          (p.category === "restaurant" ||
-            ["restaurant", "cafe", "fast_food"].includes(p.kind)),
-      );
+      // Meal candidates: strictly restaurant/cafe, prefer within ~2 km of previousCoords
+      // Never two meals back to back:
+      const lastStop = stops[stops.length - 1];
+      if (lastStop?.type !== "food") {
+        pool = input.destinationCandidates.filter(
+          (p) =>
+            !usedIds.has(p.id) &&
+            (p.category === "restaurant" ||
+              ["restaurant", "cafe", "fast_food"].includes(p.kind)),
+        );
+      }
     } else if (slotDef.slot === "sunset") {
-      // Sunset candidates: beach, viewpoint, fort, or bestTime === "sunset"
+      // Sunset candidates: beach, viewpoint, fort, or bestTime === "sunset" (strictly non-food)
       pool = input.destinationCandidates.filter(
         (p) =>
           !usedIds.has(p.id) &&
           p.category !== "hotel" &&
+          p.category !== "restaurant" &&
+          !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
           (p.bestTime === "sunset" ||
             ["beach", "viewpoint", "fort", "lighthouse"].includes(p.kind) ||
             p.name.toLowerCase().includes("beach") ||
@@ -693,40 +721,41 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       );
       if (pool.length === 0) {
         pool = clusterPool.filter(
-          (p) => !usedIds.has(p.id) && p.category !== "hotel",
+          (p) =>
+            !usedIds.has(p.id) &&
+            p.category !== "hotel" &&
+            p.category !== "restaurant" &&
+            !["restaurant", "cafe", "fast_food"].includes(p.kind),
+        );
+      }
+      if (pool.length === 0) {
+        pool = input.destinationCandidates.filter(
+          (p) =>
+            !usedIds.has(p.id) &&
+            p.category !== "hotel" &&
+            p.category !== "restaurant" &&
+            !["restaurant", "cafe", "fast_food"].includes(p.kind),
         );
       }
     } else {
-      // Main destination cluster
-      pool = clusterPool.filter(
-        (p) => !usedIds.has(p.id) && p.category !== "hotel",
+      // Main destination cluster (strictly non-food)
+      const nonFoodInCluster = clusterPool.filter(
+        (p) =>
+          !usedIds.has(p.id) &&
+          p.category !== "hotel" &&
+          p.category !== "restaurant" &&
+          !["restaurant", "cafe", "fast_food"].includes(p.kind),
       );
-      if (pool.length === 0) {
+      if (nonFoodInCluster.length > 0) {
+        pool = nonFoodInCluster;
+      } else {
         pool = input.destinationCandidates.filter(
-          (p) => !usedIds.has(p.id) && p.category !== "hotel",
+          (p) =>
+            !usedIds.has(p.id) &&
+            p.category !== "hotel" &&
+            p.category !== "restaurant" &&
+            !["restaurant", "cafe", "fast_food"].includes(p.kind),
         );
-      }
-    }
-
-    // Never two meals back-to-back:
-    const lastStop = stops[stops.length - 1];
-    if (lastStop?.type === "food") {
-      pool = pool.filter(
-        (p) =>
-          p.category !== "restaurant" &&
-          !["restaurant", "cafe", "fast_food"].includes(p.kind),
-      );
-    }
-
-    // Main and sunset slots should prefer non-restaurant venues unless no other choice exists
-    if (slotDef.slot !== "meal") {
-      const nonFood = pool.filter(
-        (p) =>
-          p.category !== "restaurant" &&
-          !["restaurant", "cafe", "fast_food"].includes(p.kind),
-      );
-      if (nonFood.length > 0) {
-        pool = nonFood;
       }
     }
 
@@ -759,8 +788,25 @@ export function planDay(input: PlanDayInput): PlanDayResult {
           }
         }
 
-        const arrivalMin = Math.max(clock + transitMin, slotDef.windowStartMin);
-        const openStatus = isOpenAt(place.openingHours, input.date, arrivalMin);
+        let arrivalMin = Math.max(clock + transitMin, slotDef.windowStartMin);
+        let openStatus = isOpenAt(place.openingHours, input.date, arrivalMin);
+
+        // If closed at exact arrival minute, check if venue opens slightly later within the slot window
+        if (openStatus === "closed" && place.openingHours) {
+          const maxWait = 45;
+          const checkLimit = Math.min(
+            arrivalMin + maxWait,
+            slotDef.windowEndMin,
+            deadlineMinute - 20,
+          );
+          for (let t = arrivalMin + 5; t <= checkLimit; t += 5) {
+            if (isOpenAt(place.openingHours, input.date, t) === "open") {
+              arrivalMin = t;
+              openStatus = "open";
+              break;
+            }
+          }
+        }
 
         // Detour in minutes for en-route
         const detourMin =
@@ -792,29 +838,67 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       .filter((c) => (slotDef.slot === "en-route" ? c.detourMin <= 12 : true))
       .sort((a, b) => b.score - a.score || a.distKm - b.distKm);
 
+    if (scored.length === 0) continue;
+
     const selected = input.slotSelections?.[slotDef.id];
     const matchSelected = selected
       ? scored.find((c) => c.place.id === selected.placeId)
       : undefined;
-    const chosen = matchSelected || scored[0];
+
+    // Try AI pick first, then remaining candidates in scored order
+    const candidatesToTry = matchSelected
+      ? [matchSelected, ...scored.filter((c) => c !== matchSelected)]
+      : scored;
+
+    let chosen: (typeof scored)[0] | undefined;
+    let chosenDurationMin = 0;
+    let chosenDepartureMin = 0;
+
+    for (const cand of candidatesToTry) {
+      // Calculate return drive if returning to start
+      let returnMin = 0;
+      if (input.returnToStart) {
+        if (input.durations && input.candidateList) {
+          const candIdx =
+            input.candidateList.findIndex((c) => c.id === cand.place.id) + 1;
+          if (candIdx > 0 && input.durations[candIdx]?.[0] != null) {
+            returnMin = Math.ceil(input.durations[candIdx]![0]! / 60) + buffer;
+          }
+        }
+        if (returnMin === 0) {
+          const returnDist = distanceKm(
+            cand.place,
+            input.start || input.destination,
+          );
+          returnMin = Math.max(5, Math.ceil(returnDist * 2.5)) + buffer;
+        }
+      }
+
+      const available = deadlineMinute - returnMin - cand.arrivalMin;
+      let dur = slotDef.durationMin || defaultDuration;
+      if (stops.length === 0) {
+        dur = Math.min(dur, available);
+      }
+      const minDur = cand.place.category === "restaurant" ? 30 : 20;
+      if (dur < minDur) continue;
+
+      const dep = cand.arrivalMin + dur;
+      if (dep + returnMin > deadlineMinute) continue;
+
+      chosen = cand;
+      chosenDurationMin = dur;
+      chosenDepartureMin = dep;
+      break;
+    }
+
     if (!chosen) continue;
 
-    const available = deadlineMinute - chosen.arrivalMin;
-    let durationMin = slotDef.durationMin || defaultDuration;
-    if (stops.length === 0) {
-      durationMin = Math.min(durationMin, available);
-    }
-    if (durationMin < (chosen.place.category === "restaurant" ? 30 : 20)) {
-      continue;
-    }
-
-    const departureMin = chosen.arrivalMin + durationMin;
-    if (departureMin > deadlineMinute) {
-      continue;
-    }
+    const durationMin = chosenDurationMin;
+    const departureMin = chosenDepartureMin;
 
     const stopType =
-      chosen.place.category === "restaurant"
+      chosen.place.category === "restaurant" ||
+      ["restaurant", "cafe", "fast_food"].includes(chosen.place.kind)
         ? "food"
         : chosen.place.kind === "beach"
           ? "beach"

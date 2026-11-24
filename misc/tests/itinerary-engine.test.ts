@@ -42,35 +42,17 @@ test("isOpenAt evaluates standard hours, 24/7, split hours, and fails soft to un
   assert.equal(isOpenAt("24/7", "2026-11-24", 1320), "open");
 
   // Split hours: Mo-Sa 10:00-14:00,17:00-22:00 (2026-11-24 is a Tuesday)
-  assert.equal(
-    isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-24", 720),
-    "open",
-  ); // 12:00
-  assert.equal(
-    isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-24", 900),
-    "closed",
-  ); // 15:00
-  assert.equal(
-    isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-24", 1080),
-    "open",
-  ); // 18:00
+  assert.equal(isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-24", 720), "open"); // 12:00
+  assert.equal(isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-24", 900), "closed"); // 15:00
+  assert.equal(isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-24", 1080), "open"); // 18:00
 
   // Sunday is closed under Mo-Sa rule (2026-11-29 is Sunday)
-  assert.equal(
-    isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-29", 720),
-    "closed",
-  );
+  assert.equal(isOpenAt("Mo-Sa 10:00-14:00,17:00-22:00", "2026-11-29", 720), "closed");
 
   // Hardened exotic rules, months, sunrise/sunset, and holiday modifiers -> "unknown"
-  assert.equal(
-    isOpenAt("Mo-Su 09:00-18:00; PH off", "2026-11-24", 600),
-    "unknown",
-  );
+  assert.equal(isOpenAt("Mo-Su 09:00-18:00; PH off", "2026-11-24", 600), "unknown");
   assert.equal(isOpenAt("sunrise-sunset", "2026-11-24", 600), "unknown");
-  assert.equal(
-    isOpenAt("Jun-Sep Mo-Fr 09:00-17:00", "2026-11-24", 600),
-    "unknown",
-  );
+  assert.equal(isOpenAt("Jun-Sep Mo-Fr 09:00-17:00", "2026-11-24", 600), "unknown");
 
   // Standard weekday-only rule checked on a Saturday (2026-11-28 is Saturday) -> "closed"
   assert.equal(isOpenAt("Mo-Fr 09:00-17:00", "2026-11-28", 600), "closed");
@@ -280,7 +262,7 @@ test("main-slot stops all lie within the cluster radius of each other", () => {
     {
       id: "a3",
       name: "Church Square",
-      lat: 15.500,
+      lat: 15.5,
       lng: 73.826,
       category: "attraction",
       kind: "place_of_worship",
@@ -290,8 +272,8 @@ test("main-slot stops all lie within the cluster radius of each other", () => {
     {
       id: "b1",
       name: "Distant Outlier Landmark",
-      lat: 15.270,
-      lng: 73.950, // ~30 km away
+      lat: 15.27,
+      lng: 73.95, // ~30 km away
       category: "attraction",
       kind: "historic",
       distanceKm: 30,
@@ -453,6 +435,141 @@ test("nearbyPlacesWithMeta returns degraded: true when Overpass fails, and plan 
 
   // 99.9 lat is unused so no cache collision
   const res = await nearbyPlacesWithMeta({ lat: 15.6059, lng: 73.7388 }, 4.7);
-  assert.equal(res.degraded, true, "nearbyPlacesWithMeta should report degraded: true on Overpass failure");
+  assert.equal(
+    res.degraded,
+    true,
+    "nearbyPlacesWithMeta should report degraded: true on Overpass failure",
+  );
   assert.ok(res.places.length > 0, "Curated fallback landmarks should still be returned");
+});
+
+test("buildItinerary sets slot on all stops, confines food to meal windows, and clusters main stops within 2.5 km", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const urlStr = String(url);
+    if (urlStr.includes("photon.komoot.io")) {
+      return Response.json({
+        features: [
+          {
+            properties: {
+              osm_id: 1,
+              osm_type: "node",
+              name: "Panaji",
+              state: "Goa",
+              countrycode: "in",
+            },
+            geometry: { coordinates: [73.8278, 15.4989] },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("overpass") || urlStr.includes("interpreter")) {
+      return Response.json({
+        elements: [
+          {
+            type: "node",
+            id: 301,
+            lat: 15.499,
+            lon: 73.828,
+            tags: {
+              name: "Panaji Fish Thali",
+              amenity: "restaurant",
+              cuisine: "goan",
+              opening_hours: "11:30-15:30,19:00-23:00",
+            },
+          },
+          {
+            type: "node",
+            id: 302,
+            lat: 15.498,
+            lon: 73.827,
+            tags: { name: "State Museum", tourism: "museum", opening_hours: "10:00-17:00" },
+          },
+          {
+            type: "node",
+            id: 303,
+            lat: 15.5,
+            lon: 73.829,
+            tags: { name: "Art Walk", tourism: "attraction" },
+          },
+          {
+            type: "node",
+            id: 304,
+            lat: 15.497,
+            lon: 73.826,
+            tags: { name: "Boutique Cafe", amenity: "cafe", opening_hours: "12:00-20:00" },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("/table/")) {
+      const match = urlStr.match(/driving\/([^?]+)/);
+      const count = match ? match[1].split(";").length : 5;
+      const durations = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) => (i === j ? 0 : 300 + Math.abs(i - j) * 120)),
+      );
+      const distances = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) => (i === j ? 0 : 800 + Math.abs(i - j) * 300)),
+      );
+      return Response.json({
+        code: "Ok",
+        durations,
+        distances,
+        sources: Array.from({ length: count }, () => ({ distance: 10 })),
+      });
+    }
+    return Response.json({});
+  });
+
+  const plan = await buildItinerary({
+    place: "Panaji",
+    state: "Goa",
+    hours: 6,
+    startTime: "09:00",
+    pace: "balanced",
+    interests: ["Culture & history", "Local food"],
+    returnToStart: false,
+  });
+
+  assert.ok(plan.stops.length >= 2, "Expected at least 2 stops");
+
+  // 1. All result stops have slot set
+  for (const stop of plan.stops) {
+    assert.ok(
+      stop.slot === "main" ||
+        stop.slot === "meal" ||
+        stop.slot === "sunset" ||
+        stop.slot === "en-route",
+      `Stop "${stop.title}" must have slot set, got ${stop.slot}`,
+    );
+  }
+
+  // 2. No food stop lies outside a meal window (breakfast: 450-600, lunch: 720-870, dinner: 1140-1290)
+  for (const stop of plan.stops) {
+    if (stop.type === "food" || stop.slot === "meal") {
+      const isBreakfast = stop.arrivalMinute! >= 450 && stop.arrivalMinute! <= 600;
+      const isLunch = stop.arrivalMinute! >= 720 && stop.arrivalMinute! <= 870;
+      const isDinner = stop.arrivalMinute! >= 1140 && stop.arrivalMinute! <= 1290;
+      assert.ok(
+        isBreakfast || isLunch || isDinner,
+        `Food stop "${stop.title}" at minute ${stop.arrivalMinute} (${stop.time}) lies outside any meal window!`,
+      );
+    }
+  }
+
+  // 3. Stops within the main slot are within 2.5 km of each other
+  const mainStops = plan.stops.filter((s) => s.slot === "main" && s.lat != null && s.lng != null);
+  if (mainStops.length >= 2) {
+    for (let i = 0; i < mainStops.length; i++) {
+      for (let j = i + 1; j < mainStops.length; j++) {
+        const d = distanceKm(
+          { lat: mainStops[i]!.lat!, lng: mainStops[i]!.lng! },
+          { lat: mainStops[j]!.lat!, lng: mainStops[j]!.lng! },
+        );
+        assert.ok(
+          d <= 2.5,
+          `Main stops "${mainStops[i]!.title}" and "${mainStops[j]!.title}" distance ${d.toFixed(2)} km exceeds 2.5 km cluster radius`,
+        );
+      }
+    }
+  }
 });
