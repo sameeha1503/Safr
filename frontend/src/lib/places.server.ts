@@ -33,7 +33,7 @@ export async function fetchJson(
   const response = await fetch(url, {
     ...init,
     headers,
-    signal: AbortSignal.timeout(Math.min(timeout, 6000)),
+    signal: AbortSignal.timeout(Math.min(timeout, 9000)),
   });
   if (!response.ok)
     throw new Error(
@@ -160,7 +160,7 @@ export async function fetchOverpass(query: string): Promise<unknown> {
       ? "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
       : "");
   const endpoints = [...new Set([primary, fallback].filter(Boolean))];
-  const deadline = Date.now() + 6000;
+  const deadline = Date.now() + 9000;
   for (const [index, endpoint] of endpoints.entries()) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
