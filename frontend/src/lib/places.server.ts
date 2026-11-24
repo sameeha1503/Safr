@@ -13,7 +13,8 @@ export function isSanePlaceName(name: string): boolean {
   // Must contain at least one real letter (rejects pure numbers/symbols)
   if (!/\p{L}/u.test(trimmed)) return false;
   // Reject obvious placeholder/junk values
-  if (/^(unnamed|n\/?a|test|tbd|none|null|undefined|unknown)$/i.test(trimmed)) return false;
+  if (/^(unnamed|n\/?a|test|tbd|none|null|undefined|unknown)$/i.test(trimmed))
+    return false;
   // Reject values that look like a URL, phone number, or email rather than a name
   if (/https?:\/\/|www\.|@|^\+?\d[\d\s-]{6,}$/.test(trimmed)) return false;
   return true;
@@ -150,7 +151,7 @@ const overpassSchema = z.object({
 
 import { CURATED_GOA_PLACES } from "./goa-places-data";
 
-/** At most two attempts within six seconds; configured private instances stay private. */
+/** At most two attempts within nine seconds; configured private instances stay private. */
 export async function fetchOverpass(query: string): Promise<unknown> {
   const primary =
     process.env["OVERPASS_URL"] || "https://overpass-api.de/api/interpreter";
@@ -173,12 +174,18 @@ export async function fetchOverpass(query: string): Promise<unknown> {
           {},
           index === endpoints.length - 1
             ? remaining
-            : Math.min(3000, remaining),
+            : Math.min(5000, remaining),
         ),
       );
       if (value.remark && !value.elements.length) continue;
       return value;
-    } catch {
+    } catch (error) {
+      // Category only: never log query text, response bodies or credentials.
+      console.warn(
+        "Overpass attempt failed:",
+        new URL(endpoint).hostname,
+        error instanceof Error ? error.name : "Unknown",
+      );
       /* Try the configured mirror before the caller's curated fallback. */
     }
   }
@@ -226,12 +233,32 @@ export async function nearbyPlaces(
     path.length > 1
       ? `${Math.min(...path.map((p) => p.lat)) - latPad},${Math.min(...path.map((p) => p.lng)) - lngPad},${Math.max(...path.map((p) => p.lat)) + latPad},${Math.max(...path.map((p) => p.lng)) + lngPad}`
       : `around:${radiusKm * 1000},${center.lat},${center.lng}`;
-  const query = `[out:json][timeout:20];nwr(${around})["name"]->.nearby;(nwr.nearby["amenity"~"^(restaurant|cafe|fast_food|food_court|bar|pub|nightclub|marketplace|place_of_worship)$"];nwr.nearby["tourism"~"^(hotel|guest_house|hostel|motel|attraction|museum|viewpoint|gallery|zoo|theme_park)$"];nwr.nearby["historic"~"^(castle|fort|monument|ruins|archaeological_site)$"];nwr.nearby["natural"~"^(beach|waterfall)$"];nwr.nearby["leisure"~"^(water_park|sports_centre|park|nature_reserve)$"];);out center tags 500;`;
+  // Filter by the selective tag first and require a name per clause. Collecting every
+  // named object in range and filtering afterwards is far slower on Overpass.
+  const placeFilters: [string, string][] = [
+    [
+      "amenity",
+      "restaurant|cafe|fast_food|food_court|bar|pub|nightclub|marketplace|place_of_worship",
+    ],
+    [
+      "tourism",
+      "hotel|guest_house|hostel|motel|attraction|museum|viewpoint|gallery|zoo|theme_park",
+    ],
+    ["historic", "castle|fort|monument|ruins|archaeological_site"],
+    ["natural", "beach|waterfall"],
+    ["leisure", "water_park|sports_centre|park|nature_reserve"],
+  ];
+  const query = `[out:json][timeout:9];(${placeFilters
+    .map(([key, values]) => `nwr["${key}"~"^(${values})$"]["name"](${around});`)
+    .join("")});out center tags 500;`;
   let rawResult: unknown;
+  // A failed or partial provider answer must not be remembered as the real answer.
+  let degraded = false;
   try {
     rawResult = await fetchOverpass(query);
   } catch (err) {
     if (curatedMatches.length > 0) {
+      degraded = true;
       console.warn(
         "Overpass unavailable; using curated destination landmarks.",
       );
@@ -245,6 +272,7 @@ export async function nearbyPlaces(
   if (result.remark && curatedMatches.length === 0) {
     throw new Error("Nearby-place lookup is busy. Please try again shortly.");
   }
+  if (result.remark) degraded = true;
 
   const seen = new Map<string, Coordinate[]>();
   const places: NearbyPlace[] = [];
@@ -311,7 +339,7 @@ export async function nearbyPlaces(
     }
   }
   places.sort((a, b) => a.distanceKm - b.distanceKm);
-  await setCached(`nearby:${key}`, places, 86400);
+  if (!degraded) await setCached(`nearby:${key}`, places, 86400);
   return places;
 }
 
@@ -447,8 +475,7 @@ export async function nearbyEssentials(
         distanceKm: 0,
         openingHours: tags["opening_hours"],
       });
-      if (!point.success)
-        continue;
+      if (!point.success) continue;
       const item = {
         ...point.data,
         distanceKm: distanceKm(center, point.data),
