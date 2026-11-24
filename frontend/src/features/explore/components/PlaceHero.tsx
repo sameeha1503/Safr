@@ -82,6 +82,35 @@ export function PlaceHero({
           </ul>
         </div>
       )}
+      {data.rules?.not_allowed && data.rules.not_allowed.length > 0 && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 space-y-1">
+          <h3 className="text-sm font-semibold">Not allowed here</h3>
+          <ul className="list-disc pl-5 text-sm space-y-1">
+            {data.rules.not_allowed.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {!!data.warnings?.length && (
+        <div className="space-y-2">
+          {data.warnings.map((warning) => (
+            <div
+              key={warning.title}
+              className={`rounded-xl border p-3 text-sm ${
+                warning.severity === "high"
+                  ? "border-destructive/40 bg-destructive/10"
+                  : warning.severity === "medium"
+                    ? "border-amber-500/40 bg-amber-500/10"
+                    : "border-muted-foreground/20 bg-muted/40"
+              }`}
+            >
+              <p className="font-semibold">{warning.title}</p>
+              <p className="text-muted-foreground">{warning.detail}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

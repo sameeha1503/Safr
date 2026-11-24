@@ -4,6 +4,7 @@ import { lookupWikipedia } from "./wikipedia.server";
 import { z } from "zod";
 import { itineraryInputSchema } from "./travel-schemas";
 import { itinerarySchema, placeInsightsSchema } from "./goa-schemas";
+import { getPlaceRules } from "./place-rules";
 import {
   locatePlace,
   nearbyPlaces,
@@ -408,6 +409,7 @@ export async function loadPlaceInsights(place: string) {
     ]).finally(() => {
       if (timer) clearTimeout(timer);
     });
+    const ruleSet = getPlaceRules(curated?.kind);
     return placeInsightsSchema.parse({
       place: base.name,
       location: base,
@@ -423,6 +425,8 @@ export async function loadPlaceInsights(place: string) {
           }
         : undefined,
       seasonNotes: curated?.seasonNotes,
+      rules: ruleSet?.rules,
+      warnings: ruleSet?.warnings,
       wikipedia: wikipedia || undefined,
       media: wikipedia?.imageUrl
         ? {
