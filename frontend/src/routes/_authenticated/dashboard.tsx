@@ -76,29 +76,31 @@ function Dashboard() {
       <SafeTagAlertBanner />
       <div className="pb-16 sm:pb-24">
         {/* The Goa edition bar: kept at the very top of the screen */}
-        <div className="flex items-center justify-between border-b border-border pb-4 text-[10px] font-semibold uppercase tracking-[0.2em] sm:text-xs">
-          <span className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" /> The Goa
+        <div className="flex items-center justify-between border-b border-orange-100/70 pb-4 text-[10px] font-semibold uppercase tracking-[0.2em] sm:text-xs">
+          <span className="flex items-center gap-2 text-stone-700">
+            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-[#ff5e28] to-[#ff2b58]" /> The Goa
             edition
           </span>
-          <span className="text-muted-foreground">
+          <span className="rounded-full bg-orange-100/80 text-orange-800 px-2.5 py-0.5 font-bold border border-orange-200/50">
             Explore / Wander / Belong
           </span>
         </div>
 
         <section className="py-7 sm:py-10" aria-labelledby="dashboard-heading">
-          <p className="mb-3 text-sm text-muted-foreground">
+          <p className="mb-3 text-sm text-stone-600 font-medium">
             {trip?.traveller_name
               ? `Make it your kind of trip, ${trip.traveller_name}.`
               : "A change of scene starts here."}
           </p>
           <h2
             id="dashboard-heading"
-            className="max-w-xl font-display text-[clamp(2.8rem,7vw,4.6rem)] leading-[1.04] tracking-[-0.045em]"
+            className="max-w-xl font-display text-[clamp(2.8rem,7vw,4.6rem)] leading-[1.04] tracking-[-0.045em] font-black text-stone-900"
           >
             Go a little further.
             <br />
-            <span className="italic text-primary">Stay a little longer.</span>
+            <span className="bg-gradient-to-r from-[#ff5400] via-[#ff3344] to-[#e60067] bg-clip-text text-transparent italic">
+              Stay a little longer.
+            </span>
           </h2>
         </section>
 
@@ -133,18 +135,18 @@ function Dashboard() {
 
         {/* Travel notes card: placed under Take the scenic way */}
         <section
-          className="relative mb-8 border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
+          className="relative mb-8 rounded-3xl border border-stone-200/70 bg-white/80 backdrop-blur-xl p-6 shadow-sm hover:shadow-md transition-all"
           aria-labelledby="trip-heading"
         >
           <div className="mb-5 flex items-center justify-between">
             <h3
               id="trip-heading"
-              className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+              className="text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500"
             >
               Your travel notes
             </h3>
             <span
-              className="h-2 w-2 rounded-full border border-primary"
+              className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-[#ff5e28] to-[#ff2b58]"
               aria-hidden="true"
             />
           </div>
@@ -166,17 +168,17 @@ function Dashboard() {
             </div>
           ) : trip ? (
             <>
-              <h4 className="break-words font-display text-3xl">
+              <h4 className="break-words font-display text-3xl font-black text-stone-900">
                 {trip.destination}
               </h4>
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="mt-2 text-xs text-stone-600">
                 {trip.days} day{trip.days === 1 ? "" : "s"} ·{" "}
                 {trip.travel_style === "group"
                   ? "Travelling together"
                   : "Your own adventure"}
               </p>
               {trip.start_date && (
-                <p className="mt-4 text-sm">
+                <p className="mt-4 text-sm font-medium text-stone-800">
                   {new Date(
                     `${trip.start_date.slice(0, 10)}T12:00:00`,
                   ).toLocaleDateString("en-IN", {
@@ -187,32 +189,32 @@ function Dashboard() {
                 </p>
               )}
               {travellers.length > 0 && (
-                <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Users className="size-4" />
+                <p className="mt-3 flex items-center gap-2 text-xs text-stone-600">
+                  <Users className="size-4 text-orange-500" />
                   {travellers.length} registered companion
                   {travellers.length === 1 ? "" : "s"}
                 </p>
               )}
               <Link
                 to="/setup"
-                className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-border pt-3 text-xs font-semibold"
+                className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-stone-200 pt-3 text-xs font-semibold text-[#ff5e28] hover:text-[#e60067] transition-colors"
               >
                 Edit trip details <ArrowUpRight className="size-4" />
               </Link>
             </>
           ) : (
             <>
-              <h4 className="font-display text-3xl">
+              <h4 className="font-display text-3xl font-black text-stone-900">
                 Every trip starts
                 <br />
                 with an idea.
               </h4>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-3 text-sm leading-relaxed text-stone-600">
                 Add your destination and the people coming along.
               </p>
               <Link
                 to="/setup"
-                className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-border pt-3 text-sm font-semibold text-primary"
+                className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-stone-200 pt-3 text-sm font-semibold text-[#ff5e28] hover:text-[#e60067] transition-colors"
               >
                 Set up your trip <ArrowRight className="size-4" />
               </Link>
@@ -225,38 +227,38 @@ function Dashboard() {
           {/* Trip Card with Weather */}
           <section
             aria-label="Trip planner"
-            className="rounded-2xl border border-border bg-card p-5 sm:p-6"
+            className="rounded-3xl border border-stone-200/70 bg-white/80 backdrop-blur-xl p-6 shadow-sm hover:shadow-md transition-all"
           >
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="text-xs uppercase tracking-[0.14em] text-stone-500 font-semibold">
               Your day, thoughtfully planned
             </p>
             <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h3 className="font-display text-2xl sm:text-3xl text-foreground">
+                <h3 className="font-display text-2xl sm:text-3xl text-stone-900 font-bold">
                   A few hours. A whole lot of Goa.
                 </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-sm text-stone-600 font-normal">
                   Build an itinerary around the time you have.
                 </p>
               </div>
               <Link
                 to="/itinerary"
-                className="inline-flex min-h-10 items-center justify-center self-start sm:self-auto shrink-0 rounded-lg bg-foreground px-4 text-xs font-semibold text-background transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary"
+                className="inline-flex min-h-10 items-center justify-center self-start sm:self-auto shrink-0 rounded-full btn-warm-gradient px-5 py-2.5 text-xs font-bold text-white shadow-md active:scale-95 transition-all"
               >
                 Build my itinerary →
               </Link>
             </div>
 
-            <div className="mt-4 border-t border-border pt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <Sun className="size-4 text-primary shrink-0" aria-hidden="true" />
+            <div className="mt-4 border-t border-stone-200/70 pt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-stone-600">
+              <span className="inline-flex items-center gap-1.5 font-medium text-stone-700">
+                <Sun className="size-4 text-orange-500 shrink-0" aria-hidden="true" />
                 <span>Today: 31°C, sunny</span>
               </span>
               <span>•</span>
               <span>Tomorrow: 29°C, afternoon showers</span>
               <Link
                 to="/explore"
-                className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                className="inline-flex items-center gap-0.5 font-semibold text-teal-600 hover:text-teal-700 hover:underline focus-visible:outline-2 focus-visible:outline-teal-600"
               >
                 Full forecast
                 <ArrowUpRight className="size-3.5" aria-hidden="true" />
@@ -267,36 +269,36 @@ function Dashboard() {
           {/* Somewhere worth a detour */}
           <section aria-labelledby="places-heading">
             <div className="mb-2 flex items-baseline justify-between gap-3">
-              <h3 id="places-heading" className="font-display text-2xl text-foreground">
+              <h3 id="places-heading" className="font-display text-2xl font-bold text-stone-900">
                 Somewhere worth a detour
               </h3>
               <Link
                 to="/explore"
-                className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-teal-600 hover:text-teal-700 hover:underline focus-visible:outline-2 focus-visible:outline-teal-600"
               >
                 Explore all <ArrowUpRight className="size-4" />
               </Link>
             </div>
-            <div className="divide-y divide-border border-b border-border">
+            <div className="divide-y divide-stone-200/70 border-b border-stone-200/70">
               {PLACES.map((place) => (
                 <Link
                   key={place.name}
                   to="/explore"
                   search={{ place: place.name }}
-                  className="group grid grid-cols-[48px_1fr_24px] sm:grid-cols-[56px_1fr_24px] items-center py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-primary"
+                  className="group grid grid-cols-[48px_1fr_24px] sm:grid-cols-[56px_1fr_24px] items-center py-4 px-2 -mx-2 rounded-xl transition-colors hover:bg-orange-50/60 focus-visible:outline-2 focus-visible:outline-teal-600"
                 >
-                  <span className="font-display text-3xl italic text-muted-foreground/60 select-none">
+                  <span className="font-display text-3xl italic text-orange-400/80 select-none">
                     {place.number}
                   </span>
                   <div className="min-w-0 pr-2">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-stone-500 font-semibold">
                       {place.category}
                     </p>
-                    <h4 className="mt-0.5 font-display text-2xl text-foreground transition-colors group-hover:text-primary">
+                    <h4 className="mt-0.5 font-display text-2xl text-stone-900 transition-colors group-hover:text-orange-600">
                       {place.name}
                     </h4>
                   </div>
-                  <ArrowUpRight className="size-5 text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  <ArrowUpRight className="size-5 text-teal-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </Link>
               ))}
             </div>
@@ -306,30 +308,32 @@ function Dashboard() {
           <section aria-labelledby="safety-heading">
             <p
               id="safety-heading"
-              className="text-xs uppercase tracking-[0.14em] text-muted-foreground mb-3"
+              className="text-xs uppercase tracking-[0.14em] text-stone-500 font-semibold mb-3"
             >
               Travel with peace of mind
             </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {SAFETY_CARDS.map((card) => {
                 const Icon = card.icon;
                 return (
                   <div
                     key={card.title}
-                    className="flex flex-col justify-between rounded-xl bg-card border border-border/60 p-4 transition-colors"
+                    className="flex flex-col justify-between rounded-2xl bg-white/75 backdrop-blur-xl border border-stone-200/70 p-5 shadow-sm hover:shadow-lg hover:border-orange-200/80 transition-all hover:-translate-y-0.5"
                   >
                     <div>
-                      <Icon className="size-5 text-primary" aria-hidden="true" />
-                      <h4 className="mt-2 text-sm sm:text-base font-medium text-foreground">
+                      <div className="size-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+                        <Icon className="size-5 text-teal-600" aria-hidden="true" />
+                      </div>
+                      <h4 className="text-base font-bold text-stone-900 font-display">
                         {card.title}
                       </h4>
-                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                      <p className="mt-1 text-xs text-stone-600 leading-relaxed font-normal">
                         {card.description}
                       </p>
                     </div>
                     <Link
                       to={card.to}
-                      className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                      className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-700 hover:underline focus-visible:outline-2 focus-visible:outline-teal-600"
                     >
                       <span>{card.label}</span>
                       <ArrowUpRight className="size-3.5" aria-hidden="true" />
@@ -344,7 +348,7 @@ function Dashboard() {
           <div className="pt-2">
             <Link
               to="/explore"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-600 hover:text-teal-700 hover:underline focus-visible:outline-2 focus-visible:outline-teal-600"
             >
               Explore & your bucket list <ArrowRight className="size-4" />
             </Link>
