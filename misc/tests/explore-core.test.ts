@@ -22,13 +22,14 @@ test("core and nearby errors fail independently without network access", async t
   assert.equal(await loadPlaceNearby({ name: "Missing place", lat: 0, lng: 0 }), null);
 });
 test("nearby results merge curated places with live fixtures within the requested radius", async t => {
-  t.mock.method(globalThis, "fetch", async () => Response.json({elements: [{type: "node", id: 811, lat: 15.606, lon: 73.739, tags: {name: "Fixture Museum", tourism: "museum"}}]}));
-  const result = await loadPlaceNearby({name: "Chapora Fort", lat: 15.6059, lng: 73.7388});
+  // Use a location with < 15 catalogue entries (Dudhsagar) to exercise the live Overpass fallback
+  t.mock.method(globalThis, "fetch", async () => Response.json({elements: [{type: "node", id: 811, lat: 15.3144, lon: 74.3143, tags: {name: "Fixture Museum", tourism: "museum"}}]}));
+  const result = await loadPlaceNearby({name: "Dudhsagar Waterfalls", lat: 15.3144, lng: 74.3143});
   assert.ok(result);
   assert.equal(result.osmCount, 1);
   assert.ok(result.curatedCount > 0);
   const places = [...result.eat, ...result.activities, ...result.sights];
-  assert.ok(places.some(place => place.name === "Chapora Fort"));
+  assert.ok(places.some(place => place.name === "Dudhsagar Waterfalls"));
   assert.ok(places.some(place => place.name === "Fixture Museum"));
   assert.ok(places.every(place => place.distanceKm <= 5));
 });

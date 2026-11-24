@@ -22,6 +22,10 @@ import {
   isOpenAt,
   scoreCandidate,
   sunsetMinutes,
+  humanizeKind,
+  humanizeCuisine,
+  cleanWhy,
+  type CandidateScoreContext,
 } from "./itinerary-engine";
 import { scheduleItinerary, formatPlanTime } from "./itinerary-planner";
 import { CURATED_GOA_PLACES } from "./goa-places-data";
@@ -158,6 +162,54 @@ export async function buildItinerary(
     ...curatedNear.filter((p) => !existingIds.has(p.id)),
   ];
 
+  const countSources = (
+    items: {
+      id?: string | undefined;
+      sourceUrl?: string | undefined;
+      source?: string | undefined;
+    }[],
+  ) => {
+    let curated = 0;
+    let osm = 0;
+    let catalogue = 0;
+    for (const item of items) {
+      if (item.source === "catalogue") {
+        catalogue++;
+      } else if (
+        item.id?.startsWith("curated/") ||
+        item.source === "curated" ||
+        (item.sourceUrl && !item.sourceUrl.includes("openstreetmap.org"))
+      ) {
+        curated++;
+      } else {
+        osm++;
+      }
+    }
+    return { curated, osm, catalogue, total: items.length };
+  };
+
+  // Stage 1: after Overpass/catalogue parsing
+  const stage1 = countSources([...destPlaces, ...corridorCandidates]);
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 1 (after place parsing): total=${stage1.total} (catalogue: ${stage1.catalogue}, curated: ${stage1.curated}, OSM: ${stage1.osm})`,
+    );
+  }
+
+  // Stage 2: after merging curated places
+  const stage2 = countSources(places);
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 2 (after merging curated places): total=${stage2.total} (catalogue: ${stage2.catalogue}, curated: ${stage2.curated}, OSM: ${stage2.osm})`,
+    );
+  }
+
+  const scoreCtx: CandidateScoreContext = {
+    interests: input.interests,
+    notes: input.notes,
+    center: destination,
+  };
+
   // 1. Prioritize user notes (specific desired works, attractions or activities)
   const notesLower = (input.notes || "").toLowerCase();
   const noteMatchedPlaces: NearbyPlace[] = [];
@@ -187,14 +239,23 @@ export async function buildItinerary(
         noteMatchedPlaces.push(p);
       }
     }
+    noteMatchedPlaces.sort(
+      (a, b) =>
+        scoreCandidate(b, scoreCtx) - scoreCandidate(a, scoreCtx) ||
+        a.distanceKm - b.distanceKm,
+    );
   }
 
-  // 2. Stratified selection per selected user interest
+  // 2. Stratified selection per selected user interest (sorted by scoreCandidate descending)
   const selectedInterestBuckets = new Map<string, NearbyPlace[]>();
   for (const interest of input.interests) {
     const matches = places
       .filter((p) => p.category !== "hotel" && matchesInterest(p, interest))
-      .sort((a, b) => a.distanceKm - b.distanceKm);
+      .sort(
+        (a, b) =>
+          scoreCandidate(b, scoreCtx) - scoreCandidate(a, scoreCtx) ||
+          a.distanceKm - b.distanceKm,
+      );
     selectedInterestBuckets.set(interest, matches);
   }
 
@@ -208,6 +269,19 @@ export async function buildItinerary(
       candidates.push(p);
     }
   };
+
+  // Ensure destination landmark is included in candidates
+  const destMatch = places.find(
+    (p) =>
+      (input.place &&
+        (p.name.toLowerCase() === input.place.toLowerCase() ||
+          p.name.toLowerCase().includes(input.place.toLowerCase()) ||
+          input.place.toLowerCase().includes(p.name.toLowerCase()))) ||
+      distanceKm(p, destination) < 0.2,
+  );
+  if (destMatch) {
+    addCandidate(destMatch);
+  }
 
   // Specific user-requested places get first priority
   for (const p of noteMatchedPlaces) {
@@ -231,22 +305,33 @@ export async function buildItinerary(
     }
   }
 
-  // Fill remaining slots up to 20 with closest remaining attractions
+  // Fill remaining slots up to 20 with highest-scoring remaining places
   const remainingPool = places
     .filter((p) => p.category !== "hotel" && !candidateSet.has(p.id))
-    .sort((a, b) => {
-      const aScore = input.interests.filter((i) =>
-        matchesInterest(a, i),
-      ).length;
-      const bScore = input.interests.filter((i) =>
-        matchesInterest(b, i),
-      ).length;
-      return bScore - aScore || a.distanceKm - b.distanceKm;
-    });
+    .sort(
+      (a, b) =>
+        scoreCandidate(b, scoreCtx) - scoreCandidate(a, scoreCtx) ||
+        a.distanceKm - b.distanceKm,
+    );
 
   for (const p of remainingPool) {
     if (candidates.length >= 20) break;
     addCandidate(p);
+  }
+
+  // Final ~20-candidate shortlist sorted by scoreCandidate (highest first), never by catalogue order or id
+  candidates.sort(
+    (a, b) =>
+      scoreCandidate(b, scoreCtx) - scoreCandidate(a, scoreCtx) ||
+      a.distanceKm - b.distanceKm,
+  );
+
+  // Stage 3: after interest filtering
+  const stage3 = countSources(candidates);
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 3 (after interest filtering): total=${stage3.total} (catalogue: ${stage3.catalogue}, curated: ${stage3.curated}, OSM: ${stage3.osm})`,
+    );
   }
 
   if (!candidates.length)
@@ -284,11 +369,14 @@ export async function buildItinerary(
 
   for (const s of slotDefinitions) {
     let pool: NearbyPlace[] = [];
-    if (s.slot === "en-route") {
+    if (s.slot === "arrive") {
+      pool = destMatch ? [destMatch] : candidates.slice(0, 1);
+    } else if (s.slot === "en-route") {
       pool = corridorCandidates.filter(
         (p) =>
           p.category !== "hotel" &&
-          (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5),
+          (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5) &&
+          distanceKm(p, destination) >= 3.0,
       );
     } else if (s.slot === "meal") {
       pool = candidates.filter(
@@ -343,8 +431,8 @@ export async function buildItinerary(
         id: c.place.id,
         name: c.place.name,
         category: c.place.category,
-        kind: c.place.kind,
-        cuisine: c.place.cuisine,
+        kind: humanizeKind(c.place),
+        cuisine: humanizeCuisine(c.place.cuisine),
         highlight: c.place.highlight,
         distanceKm: Math.round(c.place.distanceKm * 10) / 10,
         detourMin: c.detourMin,
@@ -530,6 +618,14 @@ export async function buildItinerary(
           preferredIds,
         });
 
+  // Stage 6: final stops
+  const stage6 = countSources(schedule.stops);
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 6 (final stops): total=${stage6.total} (catalogue: ${stage6.catalogue}, curated: ${stage6.curated}, OSM: ${stage6.osm})`,
+    );
+  }
+
   if (!schedule.stops.length)
     throw new Error(
       "No reachable stop fits this time budget including driving and arrival buffers. Allow more time or choose a closer starting point.",
@@ -674,6 +770,7 @@ export async function buildItinerary(
     mode,
     journey: journeyData,
     tips,
+    degraded,
   });
 }
 

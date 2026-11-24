@@ -12,7 +12,7 @@ export interface CandidateScoreContext {
 
 export interface SlotDefinition {
   id: string;
-  slot: "en-route" | "main" | "meal" | "sunset";
+  slot: "en-route" | "main" | "meal" | "sunset" | "arrive";
   targetTimeMin: number;
   windowStartMin: number;
   windowEndMin: number;
@@ -292,6 +292,7 @@ export function matchesInterest(p: NearbyPlace, interest: string): boolean {
         name.includes("cove")
       );
 
+    case "Culture & history":
     case "History & heritage":
       if (isRestaurant) return false;
       return (
@@ -537,7 +538,18 @@ export function buildSlotPlan(input: {
     currentMin = Math.max(currentMin, 480) + 40;
   }
 
-  // 3. Morning main stops (fill time before lunch)
+  // 3. Destination arrival stop (appears exactly once, slot "arrive")
+  slots.push({
+    id: "destination-arrive",
+    slot: "arrive",
+    targetTimeMin: currentMin,
+    windowStartMin: startMin,
+    windowEndMin: endMin,
+    durationMin: visitDuration,
+  });
+  currentMin += visitDuration + 10;
+
+  // 4. Morning main stops (fill time before lunch)
   const lunchWindowStart = 720; // 12:00
   const hasLunch = startMin < 840 && endMin >= 750;
   const morningCutoff = hasLunch
@@ -620,11 +632,11 @@ export function buildSlotPlan(input: {
     }
   }
 
-  // Ensure at least one main slot if no slots were added
+  // Ensure at least destination arrival slot if no slots were added
   if (slots.length === 0) {
     slots.push({
-      id: "main-primary",
-      slot: "main",
+      id: "destination-arrive",
+      slot: "arrive",
       targetTimeMin: startMin,
       windowStartMin: startMin,
       windowEndMin: endMin,
@@ -633,6 +645,123 @@ export function buildSlotPlan(input: {
   }
 
   return slots;
+}
+
+/**
+ * Converts raw OSM kind tags to clear, human-readable wording.
+ * e.g. "place_of_worship" -> "Temple" or "Church" based on venue name.
+ */
+export function humanizeKind(place: { name?: string; kind: string }): string {
+  const name = (place.name || "").toLowerCase();
+  const kind = (place.kind || "").toLowerCase().replace(/_/g, " ").trim();
+
+  if (kind.includes("place of worship") || kind === "religion") {
+    if (
+      name.includes("church") ||
+      name.includes("cathedral") ||
+      name.includes("basilica") ||
+      name.includes("chapel") ||
+      name.includes("se cathedral")
+    ) {
+      return "Church";
+    }
+    if (
+      name.includes("temple") ||
+      name.includes("mandir") ||
+      name.includes("devasthan") ||
+      name.includes("shri") ||
+      name.includes("sansthan") ||
+      name.includes("math")
+    ) {
+      return "Temple";
+    }
+    if (name.includes("mosque") || name.includes("masjid")) {
+      return "Mosque";
+    }
+    if (name.includes("gurdwara")) {
+      return "Gurdwara";
+    }
+    return "Temple";
+  }
+  if (kind === "viewpoint") return "Viewpoint";
+  if (kind === "attraction") return "Attraction";
+  if (kind === "historic" || kind === "monument") return "Historic monument";
+  if (kind === "archaeological site") return "Archaeological site";
+  if (kind === "ruins") return "Historic ruins";
+  if (kind === "fast food") return "Quick bites";
+  if (kind === "food court") return "Food court";
+  if (kind === "water park") return "Water park";
+  if (kind === "nature reserve") return "Nature reserve";
+  if (kind === "beach") return "Beach";
+  if (kind === "fort") return "Fort";
+  if (kind === "museum") return "Museum";
+  if (kind === "restaurant") return "Restaurant";
+  if (kind === "cafe") return "Café";
+  if (kind === "bar" || kind === "pub") return "Bar";
+
+  return kind
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * Converts raw OSM cuisine tags to human-friendly cuisine text.
+ * e.g. "goan;seafood;curry" -> "Goan seafood".
+ */
+export function humanizeCuisine(raw?: string): string {
+  if (!raw) return "Local dining";
+  const parts = raw
+    .split(/[;,]+/)
+    .map((s) => s.trim().replace(/_/g, " ").toLowerCase())
+    .filter(Boolean);
+  if (!parts.length) return "Local dining";
+
+  // Filter out redundant/generic sub-tags
+  const filtered = parts.filter(
+    (p) =>
+      !(
+        p === "curry" &&
+        (parts.includes("goan") ||
+          parts.includes("indian") ||
+          parts.includes("seafood"))
+      ),
+  );
+  const terms = filtered.length > 0 ? filtered.slice(0, 2) : parts.slice(0, 1);
+
+  const formatWord = (w: string) => {
+    if (w.toLowerCase() === "cafe") return "Café";
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  };
+  const formatTerm = (t: string) => t.split(" ").map(formatWord).join(" ");
+
+  if (terms.length === 1) {
+    return formatTerm(terms[0]!);
+  }
+  if (terms[0] === "goan" && (terms[1] === "seafood" || terms[1] === "fish")) {
+    return "Goan seafood";
+  }
+  return `${formatTerm(terms[0]!)} & ${formatTerm(terms[1]!)}`;
+}
+
+/**
+ * Sanitizes any raw OSM tags or remnants in "Why this stop" descriptions.
+ */
+export function cleanWhy(why: string): string {
+  if (!why) return "";
+  let text = why;
+  text = text.replace(/\bplace_of_worship\b/gi, "Temple");
+  text = text.replace(/\bfast_food\b/gi, "quick bites");
+  text = text.replace(/goan;seafood;curry/gi, "Goan seafood");
+  text = text.replace(/\b([a-z]+);([a-z]+)(;[a-z]+)*\b/gi, (match) =>
+    humanizeCuisine(match),
+  );
+  text = text.replace(
+    /destination cluster highlight/gi,
+    "in the main sightseeing cluster",
+  );
+  text = text.replace(/_/g, " ");
+  return text;
 }
 
 /**
@@ -666,6 +795,59 @@ export function planDay(input: PlanDayInput): PlanDayResult {
     2.5,
   );
 
+  const countSources = (
+    items: {
+      id?: string | undefined;
+      sourceUrl?: string | undefined;
+      source?: string | undefined;
+    }[],
+  ) => {
+    let curated = 0;
+    let osm = 0;
+    let catalogue = 0;
+    for (const item of items) {
+      if (item.source === "catalogue") {
+        catalogue++;
+      } else if (
+        item.id?.startsWith("curated/") ||
+        item.source === "curated" ||
+        (item.sourceUrl && !item.sourceUrl.includes("openstreetmap.org"))
+      ) {
+        curated++;
+      } else {
+        osm++;
+      }
+    }
+    return { curated, osm, catalogue, total: items.length };
+  };
+
+  // Stage 4: Candidates after open/closed filtering
+  const allPoolCandidates = [
+    ...input.destinationCandidates,
+    ...(input.corridorCandidates || []),
+  ];
+  const openCandidates = allPoolCandidates.filter((p) => {
+    return (
+      isOpenAt(p.openingHours, input.date, startMinute + 30) !== "closed" ||
+      isOpenAt(p.openingHours, input.date, startMinute + 120) !== "closed" ||
+      isOpenAt(p.openingHours, input.date, startMinute + 240) !== "closed"
+    );
+  });
+  const stage4 = countSources(openCandidates);
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 4 (after open/closed filtering): total=${stage4.total} (catalogue: ${stage4.catalogue}, curated: ${stage4.curated}, OSM: ${stage4.osm})`,
+    );
+  }
+
+  // Stage 5: Candidates after cluster selection
+  const stage5 = countSources(clusterPool);
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[itinerary] Stage 5 (after cluster selection): total=${stage5.total} (catalogue: ${stage5.catalogue}, curated: ${stage5.curated}, OSM: ${stage5.osm})`,
+    );
+  }
+
   const slots = buildSlotPlan({
     mode: input.mode,
     startTime: input.startTime,
@@ -685,14 +867,57 @@ export function planDay(input: PlanDayInput): PlanDayResult {
 
     // Pick candidate pool for this slot
     let pool: NearbyPlace[] = [];
-    if (slotDef.slot === "en-route") {
+    if (slotDef.slot === "arrive") {
+      const destName = (input.destination.name || "").toLowerCase().trim();
+      const destCandidate = input.destinationCandidates.find((c) => {
+        if (
+          c.category === "restaurant" ||
+          [
+            "restaurant",
+            "cafe",
+            "fast_food",
+            "food_court",
+            "bar",
+            "pub",
+          ].includes(c.kind)
+        ) {
+          return false;
+        }
+        const cName = c.name.toLowerCase().trim();
+        if (
+          destName &&
+          (cName === destName ||
+            cName.includes(destName) ||
+            destName.includes(cName))
+        ) {
+          return true;
+        }
+        return distanceKm(c, input.destination) < 0.3;
+      });
+      pool = destCandidate
+        ? [destCandidate]
+        : [
+            {
+              id: `destination/${encodeURIComponent(destName || "anchor")}`,
+              name: input.destination.name || "Destination",
+              lat: input.destination.lat,
+              lng: input.destination.lng,
+              category: "attraction" as const,
+              kind: "attraction",
+              distanceKm: 0,
+              sourceUrl: "https://www.openstreetmap.org",
+              source: "curated" as const,
+            },
+          ];
+    } else if (slotDef.slot === "en-route") {
       pool = (input.corridorCandidates || []).filter(
         (p) =>
           !usedIds.has(p.id) &&
           p.category !== "hotel" &&
           p.category !== "restaurant" &&
           !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
-          (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5),
+          (p.routeDistanceKm == null || p.routeDistanceKm <= 1.5) &&
+          distanceKm(p, input.destination) >= 3.0,
       );
     } else if (slotDef.slot === "meal") {
       // Meal candidates: strictly restaurant/cafe, prefer within ~2 km of previousCoords
@@ -739,12 +964,22 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       }
     } else {
       // Main destination cluster (strictly non-food)
+      const existingMainStops = stops.filter(
+        (s) => s.slot === "main" && s.lat != null && s.lng != null,
+      );
+      const isWithinCluster = (p: NearbyPlace) =>
+        existingMainStops.length === 0 ||
+        existingMainStops.every(
+          (s) => distanceKm({ lat: s.lat!, lng: s.lng! }, p) <= 2.5,
+        );
+
       const nonFoodInCluster = clusterPool.filter(
         (p) =>
           !usedIds.has(p.id) &&
           p.category !== "hotel" &&
           p.category !== "restaurant" &&
-          !["restaurant", "cafe", "fast_food"].includes(p.kind),
+          !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
+          isWithinCluster(p),
       );
       if (nonFoodInCluster.length > 0) {
         pool = nonFoodInCluster;
@@ -754,7 +989,8 @@ export function planDay(input: PlanDayInput): PlanDayResult {
             !usedIds.has(p.id) &&
             p.category !== "hotel" &&
             p.category !== "restaurant" &&
-            !["restaurant", "cafe", "fast_food"].includes(p.kind),
+            !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
+            isWithinCluster(p),
         );
       }
     }
@@ -928,16 +1164,21 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       slot: slotDef.slot,
       why:
         matchSelected?.place.id === selected?.placeId && selected?.why
-          ? selected.why.slice(0, 160)
-          : slotDef.slot === "en-route"
-            ? `${chosen.place.kind} · ${chosen.detourMin} min detour from route`
-            : slotDef.slot === "sunset"
-              ? `${chosen.place.kind} · ideal for sunset before dark`
-              : slotDef.slot === "meal"
-                ? `${chosen.place.cuisine || "Local dining"} · nearby meal stop`
-                : `${chosen.place.kind} · destination cluster highlight`,
+          ? cleanWhy(selected.why.slice(0, 160))
+          : slotDef.slot === "arrive"
+            ? `${humanizeKind(chosen.place)} · destination highlight`
+            : slotDef.slot === "en-route"
+              ? `${humanizeKind(chosen.place)} · ${chosen.detourMin} min detour from route`
+              : slotDef.slot === "sunset"
+                ? `${humanizeKind(chosen.place)} · ideal for sunset before dark`
+                : slotDef.slot === "meal"
+                  ? `${humanizeCuisine(chosen.place.cuisine)} · ${slotDef.id.includes("lunch") ? "lunchtime stop" : slotDef.id.includes("breakfast") ? "breakfast stop" : "nearby meal stop"}`
+                  : `${humanizeKind(chosen.place)} · in the main sightseeing cluster`,
       openStatus: chosen.openStatus === "unknown" ? "unknown" : "open",
       detourMin: chosen.detourMin,
+      source:
+        chosen.place.source ||
+        (chosen.place.id.startsWith("curated/") ? "curated" : "catalogue"),
     });
 
     usedIds.add(chosen.place.id);

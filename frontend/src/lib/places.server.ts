@@ -150,6 +150,10 @@ const overpassSchema = z.object({
 });
 
 import { CURATED_GOA_PLACES } from "./goa-places-data";
+import {
+  cataloguePlacesInBox,
+  type OverpassElementLike,
+} from "./goa-catalogue.server";
 
 /** At most two attempts within nine seconds; configured private instances stay private. */
 export async function fetchOverpass(query: string): Promise<unknown> {
@@ -230,55 +234,94 @@ export async function nearbyPlacesWithMeta(
   // around query. Filter the results against the actual road geometry below.
   const latPad = 1.5 / 111.195;
   const lngPad = latPad / Math.max(0.1, Math.cos((center.lat * Math.PI) / 180));
-  const around =
-    path.length > 1
-      ? `${Math.min(...path.map((p) => p.lat)) - latPad},${Math.min(...path.map((p) => p.lng)) - lngPad},${Math.max(...path.map((p) => p.lat)) + latPad},${Math.max(...path.map((p) => p.lng)) + lngPad}`
-      : `around:${radiusKm * 1000},${center.lat},${center.lng}`;
-  // Filter by the selective tag first and require a name per clause. Collecting every
-  // named object in range and filtering afterwards is far slower on Overpass.
-  const placeFilters: [string, string][] = [
-    [
-      "amenity",
-      "restaurant|cafe|fast_food|food_court|bar|pub|nightclub|marketplace|place_of_worship",
-    ],
-    [
-      "tourism",
-      "hotel|guest_house|hostel|motel|attraction|museum|viewpoint|gallery|zoo|theme_park",
-    ],
-    ["historic", "castle|fort|monument|ruins|archaeological_site"],
-    ["natural", "beach|waterfall"],
-    ["leisure", "water_park|sports_centre|park|nature_reserve"],
-  ];
-  const query = `[out:json][timeout:9];(${placeFilters
-    .map(([key, values]) => `nwr["${key}"~"^(${values})$"]["name"](${around});`)
-    .join("")});out center tags 500;`;
-  let rawResult: unknown;
-  // A failed or partial provider answer must not be remembered as the real answer.
+  const minLat =
+    (path.length > 1
+      ? Math.min(...path.map((p) => p.lat))
+      : center.lat - radiusKm / 111.195) - latPad;
+  const maxLat =
+    (path.length > 1
+      ? Math.max(...path.map((p) => p.lat))
+      : center.lat + radiusKm / 111.195) + latPad;
+  const radLng =
+    radiusKm / 111.195 / Math.max(0.1, Math.cos((center.lat * Math.PI) / 180));
+  const minLng =
+    (path.length > 1
+      ? Math.min(...path.map((p) => p.lng))
+      : center.lng - radLng) - lngPad;
+  const maxLng =
+    (path.length > 1
+      ? Math.max(...path.map((p) => p.lng))
+      : center.lng + radLng) + lngPad;
+
+  // 1. Primary candidate source: local Goa catalogue (in-memory)
+  const catalogueElements = cataloguePlacesInBox({
+    minLat,
+    minLng,
+    maxLat,
+    maxLng,
+  });
+
+  let elements: OverpassElementLike[] = [];
   let degraded = false;
-  try {
-    rawResult = await fetchOverpass(query);
-  } catch (err) {
-    if (curatedMatches.length > 0) {
-      degraded = true;
-      console.warn(
-        "Overpass unavailable; using curated destination landmarks.",
-      );
-      rawResult = { elements: [] };
-    } else {
-      throw err;
+  let elementSource: "catalogue" | "overpass" = "catalogue";
+
+  if (catalogueElements.length >= 15) {
+    elements = catalogueElements;
+    degraded = false;
+    elementSource = "catalogue";
+  } else {
+    // 2. Secondary fallback: live Overpass only if catalogue has < 15 elements or failed
+    const around =
+      path.length > 1
+        ? `${Math.min(...path.map((p) => p.lat)) - latPad},${Math.min(...path.map((p) => p.lng)) - lngPad},${Math.max(...path.map((p) => p.lat)) + latPad},${Math.max(...path.map((p) => p.lng)) + lngPad}`
+        : `around:${radiusKm * 1000},${center.lat},${center.lng}`;
+    const placeFilters: [string, string][] = [
+      [
+        "amenity",
+        "restaurant|cafe|fast_food|food_court|bar|pub|nightclub|marketplace|place_of_worship",
+      ],
+      [
+        "tourism",
+        "hotel|guest_house|hostel|motel|attraction|museum|viewpoint|gallery|zoo|theme_park",
+      ],
+      ["historic", "castle|fort|monument|ruins|archaeological_site"],
+      ["natural", "beach|waterfall"],
+      ["leisure", "water_park|sports_centre|park|nature_reserve"],
+    ];
+    const query = `[out:json][timeout:9];(${placeFilters
+      .map(
+        ([key, values]) => `nwr["${key}"~"^(${values})$"]["name"](${around});`,
+      )
+      .join("")});out center tags 500;`;
+
+    let rawResult: unknown;
+    try {
+      rawResult = await fetchOverpass(query);
+      const result = overpassSchema.parse(rawResult);
+      if (result.remark && curatedMatches.length === 0) {
+        throw new Error(
+          "Nearby-place lookup is busy. Please try again shortly.",
+        );
+      }
+      if (result.remark) degraded = true;
+      elements = (result.elements || []) as OverpassElementLike[];
+      elementSource = "overpass";
+    } catch (err) {
+      if (curatedMatches.length > 0) {
+        degraded = true;
+        console.warn(
+          "Overpass unavailable; using curated destination landmarks.",
+        );
+        elements = [];
+      } else {
+        throw err;
+      }
     }
   }
-
-  const result = overpassSchema.parse(rawResult);
-  if (result.remark && curatedMatches.length === 0) {
-    throw new Error("Nearby-place lookup is busy. Please try again shortly.");
-  }
-  if (result.remark) degraded = true;
 
   const seen = new Map<string, Coordinate[]>();
   const places: NearbyPlace[] = [];
 
-  const elements = result.elements || [];
   if (elements.length > 0) {
     for (const item of elements) {
       const tags = item.tags || {};
@@ -320,6 +363,19 @@ export async function nearbyPlacesWithMeta(
             tags["leisure"] ||
             tags["amenity"] ||
             "place";
+
+      const NON_SCHEDULABLE_KINDS =
+        /^(hotel|guest_house|hostel|apartment|motel|bank|school|clinic|fuel|parking)$/i;
+      if (
+        NON_SCHEDULABLE_KINDS.test(tags["tourism"] || "") ||
+        NON_SCHEDULABLE_KINDS.test(tags["amenity"] || "") ||
+        NON_SCHEDULABLE_KINDS.test(tags["building"] || "") ||
+        NON_SCHEDULABLE_KINDS.test(kind) ||
+        category === "hotel"
+      ) {
+        continue;
+      }
+
       places.push({
         ...point,
         id: `${item.type}/${item.id}`,
@@ -334,13 +390,29 @@ export async function nearbyPlacesWithMeta(
         hasWikipedia: Boolean(tags["wikipedia"]),
         hasWikidata: Boolean(tags["wikidata"]),
         hasWebsite: Boolean(tags["website"] || tags["contact:website"]),
+        source: elementSource,
       });
+      const maxCap = elementSource === "catalogue" ? 5000 : 500;
+      if (places.length >= maxCap) break;
     }
   } else if (curatedMatches.length > 0) {
     // When Overpass returns 0 elements or failed, use curated landmark database
     for (const c of curatedMatches) {
-      places.push(c);
+      places.push({
+        ...c,
+        source: "curated",
+      });
     }
+  }
+  const parsedOsm = places.filter((p) => p.source === "overpass");
+  const parsedCatalogue = places.filter((p) => p.source === "catalogue");
+  const parsedCurated = places.filter(
+    (p) => p.source === "curated" || p.id.startsWith("curated/"),
+  );
+  if (process.env["ITINERARY_DEBUG"] === "1") {
+    console.log(
+      `[nearbyPlacesWithMeta] Candidates parsed: total=${places.length} (catalogue: ${parsedCatalogue.length}, Overpass: ${parsedOsm.length}, curated: ${parsedCurated.length})`,
+    );
   }
   places.sort((a, b) => a.distanceKm - b.distanceKm);
   if (!degraded) await setCached(`nearby:${key}`, places, 86400);

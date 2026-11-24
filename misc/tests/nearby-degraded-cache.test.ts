@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { nearbyPlaces } from "../../frontend/src/lib/places.server.ts";
 import { CURATED_GOA_PLACES } from "../../frontend/src/lib/goa-places-data.ts";
 
-const curated = CURATED_GOA_PLACES[0]!;
-const center = { lat: curated.lat, lng: curated.lng };
+// Use a coordinate with < 15 catalogue entries to exercise Overpass fallback
+const center = { lat: 14.9, lng: 73.95 };
 
 test("a failed Overpass lookup is not cached as the real answer", async (t) => {
   let overpassWorks = false;
@@ -65,7 +65,7 @@ test("the Overpass query filters by selective tag first, not every named object"
     sent = decodeURIComponent(new URL(url).searchParams.get("data") ?? "");
     return Response.json({ elements: [] });
   });
-  await nearbyPlaces({ lat: 15.4, lng: 73.9 }, 4.1);
+  await nearbyPlaces(center, 4.1);
   assert.match(sent, /nwr\["tourism"~"\^\(hotel\|/);
   assert.match(sent, /\["name"\]\(around:/);
   assert.doesNotMatch(sent, /->\.nearby/);

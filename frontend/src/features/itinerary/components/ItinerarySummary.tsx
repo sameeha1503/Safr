@@ -1,4 +1,5 @@
 import type { Itinerary } from "@/lib/goa-schemas";
+import { cleanWhy } from "@/lib/itinerary-engine";
 
 export function ItinerarySummary({
   itinerary,
@@ -168,7 +169,7 @@ export function ItinerarySummary({
                 </div>
                 {stop.why && (
                   <p className="mt-1.5 text-muted-foreground italic">
-                    Why this stop: {stop.why}
+                    Why this stop: {cleanWhy(stop.why)}
                   </p>
                 )}
               </div>

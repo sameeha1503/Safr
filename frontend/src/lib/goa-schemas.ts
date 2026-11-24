@@ -84,6 +84,7 @@ export const itinerarySchema = z.object({
   stops: z
     .array(
       z.object({
+        id: z.string().optional(),
         durationMin: z.number().optional(),
         arrivalMinute: z.number().optional(),
         departureMinute: z.number().optional(),
@@ -99,10 +100,13 @@ export const itinerarySchema = z.object({
         crowdLevel: z.enum(["low", "moderate", "high"]).optional(),
         distanceKm: z.number().optional(),
         transitMin: z.number().optional(),
-        slot: z.enum(["en-route", "main", "meal", "sunset"]).optional(),
+        slot: z
+          .enum(["en-route", "main", "meal", "sunset", "arrive"])
+          .optional(),
         why: z.string().optional(),
         openStatus: z.enum(["open", "unknown"]).optional(),
         detourMin: z.number().optional(),
+        source: z.enum(["catalogue", "overpass", "curated"]).optional(),
       }),
     )
     .min(1)
@@ -130,6 +134,7 @@ export const itinerarySchema = z.object({
     })
     .optional(),
   mode: z.enum(["journey", "anchor"]).optional(),
+  degraded: z.boolean().optional(),
   liveWeather: z.string().optional(),
   liveSwell: z.string().optional(),
 });
