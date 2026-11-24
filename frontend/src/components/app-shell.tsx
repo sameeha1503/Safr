@@ -32,6 +32,7 @@ const NAV_ITEMS = [
   { to: "/map", label: "Map", icon: Compass },
   { to: "/explore", label: "Explore", icon: Sparkles },
   { to: "/itinerary", label: "Itinerary", icon: CalendarDays },
+  { to: "/live-tracking", label: "Find People", icon: LocateFixed },
   { to: "/safety-tags", label: "SafeTags", icon: QrCode },
 ] as const;
 
@@ -152,8 +153,8 @@ export function AppShell({
       </main>
 
       {/* Floating Bottom Navigation Dock (Mobile-First) */}
-      <nav className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md">
-        <div className="flex items-center justify-around rounded-3xl border border-border/60 bg-card/80 p-2 shadow-2xl backdrop-blur-2xl">
+      <nav className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-lg">
+        <div className="flex items-center justify-around rounded-3xl border border-border/60 bg-card/80 p-1.5 sm:p-2 shadow-2xl backdrop-blur-2xl">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -163,7 +164,7 @@ export function AppShell({
               <Link
                 key={item.to}
                 to={item.to}
-                className={`group relative flex flex-col items-center gap-1 rounded-2xl px-3 py-2 text-xs font-bold transition-all ${
+                className={`group relative flex flex-col items-center gap-1 rounded-2xl px-2 py-1.5 sm:px-3 sm:py-2 text-xs font-bold transition-all ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 scale-105"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
@@ -172,7 +173,9 @@ export function AppShell({
                 <Icon
                   className={`size-4 transition-transform group-hover:scale-110 ${isActive ? "text-primary-foreground" : ""}`}
                 />
-                <span className="text-[10px] tracking-tight">{item.label}</span>
+                <span className="text-[10px] tracking-tight whitespace-nowrap">
+                  {item.label}
+                </span>
               </Link>
             );
           })}
