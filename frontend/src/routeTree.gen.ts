@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as EmergencyRouteImport } from './routes/emergency'
 import { Route as FindRouteImport } from './routes/find'
+import { Route as PlannerRouteImport } from './routes/planner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedExploreRouteImport } from './routes/_authenticated/explore'
 import { Route as AuthenticatedItineraryRouteImport } from './routes/_authenticated/itinerary'
@@ -46,6 +47,11 @@ const EmergencyRoute = EmergencyRouteImport.update({
 const FindRoute = FindRouteImport.update({
   id: '/find',
   path: '/find',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlannerRoute = PlannerRouteImport.update({
+  id: '/planner',
+  path: '/planner',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/emergency': typeof EmergencyRoute
   '/find': typeof FindRoute
+  '/planner': typeof PlannerRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/explore': typeof AuthenticatedExploreRoute
   '/itinerary': typeof AuthenticatedItineraryRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/emergency': typeof EmergencyRoute
   '/find': typeof FindRoute
+  '/planner': typeof PlannerRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/explore': typeof AuthenticatedExploreRoute
   '/itinerary': typeof AuthenticatedItineraryRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/emergency': typeof EmergencyRoute
   '/find': typeof FindRoute
+  '/planner': typeof PlannerRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/explore': typeof AuthenticatedExploreRoute
   '/_authenticated/itinerary': typeof AuthenticatedItineraryRoute
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/emergency'
     | '/find'
+    | '/planner'
     | '/dashboard'
     | '/explore'
     | '/itinerary'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/emergency'
     | '/find'
+    | '/planner'
     | '/dashboard'
     | '/explore'
     | '/itinerary'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/emergency'
     | '/find'
+    | '/planner'
     | '/_authenticated/dashboard'
     | '/_authenticated/explore'
     | '/_authenticated/itinerary'
@@ -197,6 +209,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   EmergencyRoute: typeof EmergencyRoute
   FindRoute: typeof FindRoute
+  PlannerRoute: typeof PlannerRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TTokenRoute: typeof TTokenRoute
 }
@@ -236,6 +249,13 @@ declare module '@tanstack/react-router' {
       path: '/find'
       fullPath: '/find'
       preLoaderRoute: typeof FindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/planner': {
+      id: '/planner'
+      path: '/planner'
+      fullPath: '/planner'
+      preLoaderRoute: typeof PlannerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/dashboard': {
@@ -333,6 +353,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   EmergencyRoute: EmergencyRoute,
   FindRoute: FindRoute,
+  PlannerRoute: PlannerRoute,
   ShareTokenRoute: ShareTokenRoute,
   TTokenRoute: TTokenRoute,
 }
