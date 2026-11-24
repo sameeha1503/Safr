@@ -77,7 +77,96 @@ function Dashboard() {
   return (
     <AppShell title="Your getaway" subtitle="Goa, at your own pace">
       <SafeTagAlertBanner />
-      <div>
+      <div className="pb-16 sm:pb-24">
+        {/* Travel notes card: first thing on page load, directly below header and above hero heading */}
+        <section
+          className="relative mb-7 border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
+          aria-labelledby="trip-heading"
+        >
+          <div className="mb-5 flex items-center justify-between">
+            <h3
+              id="trip-heading"
+              className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+            >
+              Your travel notes
+            </h3>
+            <span
+              className="h-2 w-2 rounded-full border border-primary"
+              aria-hidden="true"
+            />
+          </div>
+          {isPending ? (
+            <div role="status" className="space-y-3">
+              <span className="sr-only">Loading your trip</span>
+              <div className="h-8 w-2/3 animate-pulse bg-muted motion-reduce:animate-none" />
+              <div className="h-14 animate-pulse bg-muted motion-reduce:animate-none" />
+            </div>
+          ) : isError ? (
+            <div>
+              <p className="text-sm">Your trip details couldn’t load.</p>
+              <button
+                className="mt-3 min-h-11 text-sm font-semibold underline"
+                onClick={() => void refetch()}
+              >
+                Try again
+              </button>
+            </div>
+          ) : trip ? (
+            <>
+              <h4 className="break-words font-display text-3xl">
+                {trip.destination}
+              </h4>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {trip.days} day{trip.days === 1 ? "" : "s"} ·{" "}
+                {trip.travel_style === "group"
+                  ? "Travelling together"
+                  : "Your own adventure"}
+              </p>
+              {trip.start_date && (
+                <p className="mt-4 text-sm">
+                  {new Date(
+                    `${trip.start_date.slice(0, 10)}T12:00:00`,
+                  ).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
+              {travellers.length > 0 && (
+                <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Users className="size-4" />
+                  {travellers.length} registered companion
+                  {travellers.length === 1 ? "" : "s"}
+                </p>
+              )}
+              <Link
+                to="/setup"
+                className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-border pt-3 text-xs font-semibold"
+              >
+                Edit trip details <ArrowUpRight className="size-4" />
+              </Link>
+            </>
+          ) : (
+            <>
+              <h4 className="font-display text-3xl">
+                Every trip starts
+                <br />
+                with an idea.
+              </h4>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                Add your destination and the people coming along.
+              </p>
+              <Link
+                to="/setup"
+                className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-border pt-3 text-sm font-semibold text-primary"
+              >
+                Set up your trip <ArrowRight className="size-4" />
+              </Link>
+            </>
+          )}
+        </section>
+
         <div className="flex items-center justify-between border-b border-border pb-4 text-[10px] font-semibold uppercase tracking-[0.2em] sm:text-xs">
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" /> The Goa
@@ -102,35 +191,39 @@ function Dashboard() {
             <span className="italic text-primary">Stay a little longer.</span>
           </h2>
         </section>
+
+        {/* Full-width Scenic Way Banner */}
+        <Link
+          to="/map"
+          className="group relative isolate mb-8 flex min-h-[260px] w-full flex-col justify-between overflow-hidden rounded-2xl bg-[#123f3b] p-6 text-[#fff9eb] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-primary sm:min-h-[320px] sm:rounded-3xl sm:p-8 lg:h-[360px]"
+        >
+          <CoastalArtwork />
+          <div className="relative flex items-center justify-between">
+            <span className="text-xs uppercase tracking-[0.2em]">
+              Take the scenic way
+            </span>
+            <Compass className="size-6 opacity-80" aria-hidden="true" />
+          </div>
+          <div className="relative max-w-md pt-6 sm:pt-10">
+            <h3 className="font-display text-[2rem] leading-[1.05] sm:text-[2.5rem]">
+              Less searching.
+              <br />
+              More exploring.
+            </h3>
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-[#e2ece5] sm:max-w-sm">
+              Find a place, trace your route, and see where the day takes
+              you.
+            </p>
+            <span className="mt-5 inline-flex min-h-11 items-center gap-4 border-b border-white/60 pb-1 text-sm font-semibold sm:mt-6 sm:gap-5">
+              Open your map{" "}
+              <ArrowUpRight className="size-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1 motion-reduce:transform-none" />
+            </span>
+          </div>
+        </Link>
+
+        {/* Lower section layout */}
         <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
           <div className="min-w-0 space-y-7">
-            <Link
-              to="/map"
-              className="group relative isolate flex min-h-[320px] flex-col justify-between overflow-hidden rounded-[4px_42px_4px_4px] bg-[#123f3b] p-6 text-[#fff9eb] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-primary sm:min-h-[350px] sm:p-8"
-            >
-              <CoastalArtwork />
-              <div className="relative flex items-center justify-between">
-                <span className="text-xs uppercase tracking-[0.2em]">
-                  Take the scenic way
-                </span>
-                <Compass className="size-6 opacity-80" aria-hidden="true" />
-              </div>
-              <div className="relative max-w-[300px] pt-14">
-                <h3 className="font-display text-[2rem] leading-[1.05] sm:text-[2.5rem]">
-                  Less searching.
-                  <br />
-                  More exploring.
-                </h3>
-                <p className="mt-3 max-w-44 text-sm leading-relaxed text-[#e2ece5] sm:max-w-52">
-                  Find a place, trace your route, and see where the day takes
-                  you.
-                </p>
-                <span className="mt-6 inline-flex min-h-11 items-center gap-5 border-b border-white/60 pb-1 text-sm font-semibold">
-                  Open your map{" "}
-                  <ArrowUpRight className="size-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1 motion-reduce:transform-none" />
-                </span>
-              </div>
-            </Link>
             <Link
               to="/itinerary"
               className="group flex items-center gap-4 border-y border-border py-5 focus-visible:outline-2 focus-visible:outline-primary sm:gap-5"
@@ -195,93 +288,6 @@ function Dashboard() {
             </section>
           </div>
           <aside className="space-y-7" aria-label="Your trip and companions">
-            <section
-              className="relative border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
-              aria-labelledby="trip-heading"
-            >
-              <div className="mb-5 flex items-center justify-between">
-                <h3
-                  id="trip-heading"
-                  className="text-[10px] font-semibold uppercase tracking-[0.2em]"
-                >
-                  Your travel notes
-                </h3>
-                <span
-                  className="h-2 w-2 rounded-full border border-primary"
-                  aria-hidden="true"
-                />
-              </div>
-              {isPending ? (
-                <div role="status" className="space-y-3">
-                  <span className="sr-only">Loading your trip</span>
-                  <div className="h-8 w-2/3 animate-pulse bg-muted motion-reduce:animate-none" />
-                  <div className="h-14 animate-pulse bg-muted motion-reduce:animate-none" />
-                </div>
-              ) : isError ? (
-                <div>
-                  <p className="text-sm">Your trip details couldn’t load.</p>
-                  <button
-                    className="mt-3 min-h-11 text-sm font-semibold underline"
-                    onClick={() => void refetch()}
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : trip ? (
-                <>
-                  <h4 className="break-words font-display text-3xl">
-                    {trip.destination}
-                  </h4>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {trip.days} day{trip.days === 1 ? "" : "s"} ·{" "}
-                    {trip.travel_style === "group"
-                      ? "Travelling together"
-                      : "Your own adventure"}
-                  </p>
-                  {trip.start_date && (
-                    <p className="mt-4 text-sm">
-                      {new Date(
-                        `${trip.start_date.slice(0, 10)}T12:00:00`,
-                      ).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </p>
-                  )}
-                  {travellers.length > 0 && (
-                    <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                      <Users className="size-4" />
-                      {travellers.length} registered companion
-                      {travellers.length === 1 ? "" : "s"}
-                    </p>
-                  )}
-                  <Link
-                    to="/setup"
-                    className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-border pt-3 text-xs font-semibold"
-                  >
-                    Edit trip details <ArrowUpRight className="size-4" />
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <h4 className="font-display text-3xl">
-                    Every trip starts
-                    <br />
-                    with an idea.
-                  </h4>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    Add your destination and the people coming along.
-                  </p>
-                  <Link
-                    to="/setup"
-                    className="mt-5 flex min-h-11 items-center justify-between border-t border-dashed border-border pt-3 text-sm font-semibold text-primary"
-                  >
-                    Set up your trip <ArrowRight className="size-4" />
-                  </Link>
-                </>
-              )}
-            </section>
             <section aria-labelledby="company-heading">
               <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 A little peace of mind
