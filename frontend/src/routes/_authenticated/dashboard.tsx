@@ -78,9 +78,20 @@ function Dashboard() {
     <AppShell title="Your getaway" subtitle="Goa, at your own pace">
       <SafeTagAlertBanner />
       <div className="pb-16 sm:pb-24">
-        {/* Travel notes card: first thing on page load, directly below header and above hero heading */}
+        {/* The Goa edition bar: kept at the very top of the screen */}
+        <div className="flex items-center justify-between border-b border-border pb-4 text-[10px] font-semibold uppercase tracking-[0.2em] sm:text-xs">
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" /> The Goa
+            edition
+          </span>
+          <span className="text-muted-foreground">
+            Explore / Wander / Belong
+          </span>
+        </div>
+
+        {/* Travel notes card: directly below The Goa edition and above hero heading */}
         <section
-          className="relative mb-7 border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
+          className="relative mt-6 mb-7 border border-border bg-card p-5 shadow-[4px_4px_0_0_var(--secondary)]"
           aria-labelledby="trip-heading"
         >
           <div className="mb-5 flex items-center justify-between">
@@ -166,16 +177,6 @@ function Dashboard() {
             </>
           )}
         </section>
-
-        <div className="flex items-center justify-between border-b border-border pb-4 text-[10px] font-semibold uppercase tracking-[0.2em] sm:text-xs">
-          <span className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" /> The Goa
-            edition
-          </span>
-          <span className="text-muted-foreground">
-            Explore / Wander / Belong
-          </span>
-        </div>
         <section className="py-7 sm:py-10" aria-labelledby="dashboard-heading">
           <p className="mb-3 text-sm text-muted-foreground">
             {trip?.traveller_name
