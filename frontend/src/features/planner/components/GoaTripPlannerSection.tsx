@@ -116,7 +116,7 @@ export const FOOTER_CONFIG = {
 export function GoaTripPlannerSection() {
   return (
     <div className="w-full bg-[#FAF7F2] text-[#1C1B19] antialiased">
-      <main className="mx-auto w-full max-w-[680px] px-4 pt-6 pb-12 sm:px-6 sm:pt-8 sm:pb-16 font-sans">
+      <main className="mx-auto w-full max-w-[680px] px-4 py-6 sm:px-6 sm:py-8 font-sans">
         {/* 1. Emergency bar */}
         <section
           aria-label="Emergency help"
@@ -277,3 +277,4 @@ export function GoaTripPlannerSection() {
     </div>
   );
 }
+

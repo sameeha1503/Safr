@@ -1,19 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   ArrowUpRight,
-  CalendarDays,
   Compass,
   LocateFixed,
-  Phone,
+  MapPin,
   QrCode,
+  Sun,
   Users,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { SafeTagAlertBanner } from "@/components/safetag-alert-banner";
-import { WeatherWidget } from "@/components/WeatherWidget";
 import { supabase } from "@/integrations/supabase/client";
 import { CoastalArtwork } from "@/features/dashboard/components/CoastalArtwork";
 
@@ -29,32 +27,31 @@ const PLACES = [
     number: "03",
   },
 ];
-const COMPANION_TOOLS = [
+const SAFETY_CARDS = [
   {
     to: "/live-tracking",
     icon: LocateFixed,
     title: "Find your people",
-    description: "Shared locations & meeting spots",
-    label: "Reunite",
+    description: "Shared locations and meeting spots",
+    label: "Open Reunite",
   },
   {
     to: "/safety-tags",
     icon: QrCode,
     title: "Keep them connected",
     description: "QR wristbands for your companions",
-    label: "SafeTags",
+    label: "Get SafeTags",
   },
   {
-    to: "/emergency",
-    icon: Phone,
-    title: "Help, when it matters",
-    description: "Emergency numbers & local assistance",
-    label: "Emergency",
+    to: "/map",
+    icon: MapPin,
+    title: "Safe routes",
+    description: "Directions scored for safety",
+    label: "Plan a route",
   },
 ] as const;
 
 function Dashboard() {
-  const [showWeather, setShowWeather] = useState(false);
   const {
     data: trip,
     isPending,
@@ -223,114 +220,135 @@ function Dashboard() {
           )}
         </section>
 
-        {/* Lower section layout */}
-        <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-8">
-          <div className="min-w-0 space-y-7">
-            <Link
-              to="/itinerary"
-              className="group flex items-center gap-4 border-y border-border py-5 focus-visible:outline-2 focus-visible:outline-primary sm:gap-5"
-            >
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[#e8b987]/25 text-foreground">
-                <CalendarDays className="size-5" />
-              </span>
-              <div className="flex-1">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  Your day, thoughtfully planned
-                </p>
-                <h3 className="mt-1 font-display text-2xl">
+        {/* Lower section layout: Single-column stack matching Image 2 */}
+        <div className="space-y-8">
+          {/* Trip Card with Weather */}
+          <section
+            aria-label="Trip planner"
+            className="rounded-2xl border border-border bg-card p-5 sm:p-6"
+          >
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Your day, thoughtfully planned
+            </p>
+            <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="font-display text-2xl sm:text-3xl text-foreground">
                   A few hours. A whole lot of Goa.
                 </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Build an itinerary around the time you have.
                 </p>
               </div>
-              <ArrowRight className="size-5 shrink-0 transition-transform group-hover:translate-x-1 motion-reduce:transform-none" />
-            </Link>
-            <section aria-labelledby="places-heading">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h3 id="places-heading" className="font-display text-2xl">
-                  Somewhere worth a detour.
-                </h3>
-                <Link
-                  to="/explore"
-                  className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-semibold text-primary"
-                >
-                  Explore all <ArrowUpRight className="size-4" />
-                </Link>
-              </div>
-              <div className="divide-y divide-border">
-                {PLACES.map((place) => (
-                  <Link
-                    key={place.name}
-                    to="/explore"
-                    search={{ place: place.name }}
-                    className="group flex min-h-24 items-center gap-5 py-4 focus-visible:outline-2 focus-visible:outline-primary"
-                  >
-                    <span className="font-display text-3xl italic text-muted-foreground/60">
-                      {place.number}
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                        {place.category}
-                      </p>
-                      <h4 className="mt-1 font-display text-2xl transition-colors group-hover:text-primary">
-                        {place.name}
-                      </h4>
-                    </div>
-                    <ArrowUpRight className="size-4 text-muted-foreground" />
-                  </Link>
-                ))}
-              </div>
+              <Link
+                to="/itinerary"
+                className="inline-flex min-h-10 items-center justify-center self-start sm:self-auto shrink-0 rounded-lg bg-foreground px-4 text-xs font-semibold text-background transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                Build my itinerary →
+              </Link>
+            </div>
+
+            <div className="mt-4 border-t border-border pt-3.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <Sun className="size-4 text-primary shrink-0" aria-hidden="true" />
+                <span>Today: 31°C, sunny</span>
+              </span>
+              <span>•</span>
+              <span>Tomorrow: 29°C, afternoon showers</span>
               <Link
                 to="/explore"
-                className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary"
+                className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
               >
-                Explore & your bucket list <ArrowRight className="size-4" />
+                Full forecast
+                <ArrowUpRight className="size-3.5" aria-hidden="true" />
               </Link>
-            </section>
-          </div>
-          <aside className="space-y-7" aria-label="Your trip and companions">
-            <section aria-labelledby="company-heading">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                A little peace of mind
-              </p>
-              <h3 id="company-heading" className="mt-2 font-display text-2xl">
-                In good company.
+            </div>
+          </section>
+
+          {/* Somewhere worth a detour */}
+          <section aria-labelledby="places-heading">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <h3 id="places-heading" className="font-display text-2xl text-foreground">
+                Somewhere worth a detour
               </h3>
-              <div className="mt-3 divide-y divide-border">
-                {COMPANION_TOOLS.map((tool) => (
-                  <Link
-                    key={tool.to}
-                    to={tool.to}
-                    aria-label={`${tool.label}: ${tool.title}`}
-                    className="group flex items-start gap-3 py-4 focus-visible:outline-2 focus-visible:outline-primary"
-                  >
-                    <tool.icon className="mt-1 size-4 shrink-0 text-primary" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-semibold group-hover:text-primary">
-                        {tool.title}
-                      </h4>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        {tool.description}
-                      </p>
-                      <span className="mt-2 inline-block text-[10px] font-semibold uppercase tracking-wider text-primary">
-                        {tool.label} ↗
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-            <details
-              className="border-t border-border pt-3"
-              onToggle={(event) => setShowWeather(event.currentTarget.open)}
+              <Link
+                to="/explore"
+                className="inline-flex items-center gap-0.5 text-xs sm:text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                Explore all <ArrowUpRight className="size-4" />
+              </Link>
+            </div>
+            <div className="divide-y divide-border border-b border-border">
+              {PLACES.map((place) => (
+                <Link
+                  key={place.name}
+                  to="/explore"
+                  search={{ place: place.name }}
+                  className="group grid grid-cols-[48px_1fr_24px] sm:grid-cols-[56px_1fr_24px] items-center py-4 px-2 -mx-2 rounded-lg transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  <span className="font-display text-3xl italic text-muted-foreground/60 select-none">
+                    {place.number}
+                  </span>
+                  <div className="min-w-0 pr-2">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                      {place.category}
+                    </p>
+                    <h4 className="mt-0.5 font-display text-2xl text-foreground transition-colors group-hover:text-primary">
+                      {place.name}
+                    </h4>
+                  </div>
+                  <ArrowUpRight className="size-5 text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          {/* Travel with peace of mind */}
+          <section aria-labelledby="safety-heading">
+            <p
+              id="safety-heading"
+              className="text-xs uppercase tracking-[0.14em] text-muted-foreground mb-3"
             >
-              <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold">
-                Before you head out · Weather
-              </summary>
-              <div className="mt-3">{showWeather && <WeatherWidget />}</div>
-            </details>
-          </aside>
+              Travel with peace of mind
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {SAFETY_CARDS.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <div
+                    key={card.title}
+                    className="flex flex-col justify-between rounded-xl bg-card border border-border/60 p-4 transition-colors"
+                  >
+                    <div>
+                      <Icon className="size-5 text-primary" aria-hidden="true" />
+                      <h4 className="mt-2 text-sm sm:text-base font-medium text-foreground">
+                        {card.title}
+                      </h4>
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                        {card.description}
+                      </p>
+                    </div>
+                    <Link
+                      to={card.to}
+                      className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <span>{card.label}</span>
+                      <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Explore & your bucket list link */}
+          <div className="pt-2">
+            <Link
+              to="/explore"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              Explore & your bucket list <ArrowRight className="size-4" />
+            </Link>
+          </div>
         </div>
         <div className="mt-10 flex items-center justify-between border-t border-border pt-5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           <span>Made for the journey.</span>
