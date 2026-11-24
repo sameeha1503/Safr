@@ -30,9 +30,53 @@ export function itineraryMapHandoff(
       ? []
       : [{ name: stop.title, lat: stop.lat, lng: stop.lng }],
   );
-  if (mappedStops.length < 2 && !itinerary.origin) return null;
+  if (mappedStops.length < 2 && !itinerary.origin && !itinerary.journey)
+    return null;
   if (mappedStops.length === 0) return null;
 
+  // Journey mode: use journey.start as origin and destination as end, with stops as waypoints
+  if (
+    itinerary.mode === "journey" &&
+    itinerary.journey?.start &&
+    itinerary.journey?.destination
+  ) {
+    const origin = {
+      name: itinerary.journey.start.name || "Starting point",
+      lat: itinerary.journey.start.lat,
+      lng: itinerary.journey.start.lng,
+    };
+    const returnsToStart = (itinerary.returnMinutes ?? 0) > 0;
+    const destination = returnsToStart
+      ? origin
+      : {
+          name: itinerary.journey.destination.name || placeName,
+          lat: itinerary.journey.destination.lat,
+          lng: itinerary.journey.destination.lng,
+        };
+    const waypoints = mappedStops.slice(0, 5);
+
+    return {
+      search: {
+        dest: destination.name,
+        lat: String(destination.lat),
+        lng: String(destination.lng),
+        origin: origin.name,
+        originLat: String(origin.lat),
+        originLng: String(origin.lng),
+        ...(waypoints.length > 0
+          ? {
+              stops: JSON.stringify(
+                waypoints.map(({ name, lat, lng }) => ({ name, lat, lng })),
+              ),
+            }
+          : {}),
+      },
+      includedStopCount: waypoints.length,
+      mappedStopCount: mappedStops.length,
+    };
+  }
+
+  // Anchor mode (keep existing behaviour)
   const returnsToStart =
     itinerary.origin != null && (itinerary.returnMinutes ?? 0) > 0;
   const origin = itinerary.origin

@@ -195,11 +195,11 @@ export async function fetchOverpass(query: string): Promise<unknown> {
   throw new Error("Nearby-place providers are temporarily unavailable.");
 }
 
-export async function nearbyPlaces(
+export async function nearbyPlacesWithMeta(
   center: Coordinate,
   radiusKm = 5,
   path: Coordinate[] = [],
-): Promise<NearbyPlace[]> {
+): Promise<{ places: NearbyPlace[]; degraded: boolean }> {
   const key = JSON.stringify([
     center.lat.toFixed(3),
     center.lng.toFixed(3),
@@ -207,7 +207,8 @@ export async function nearbyPlaces(
     path,
   ]);
   const cached = await getCached(`nearby:${key}`);
-  if (Array.isArray(cached)) return cached as NearbyPlace[];
+  if (Array.isArray(cached))
+    return { places: cached as NearbyPlace[], degraded: false };
 
   // Gather curated places within search range
   const searchLimit = Math.max(radiusKm * 1.5, 15);
@@ -330,6 +331,9 @@ export async function nearbyPlaces(
         distanceKm: distance,
         routeDistanceKm: fromRoute,
         sourceUrl: `https://www.openstreetmap.org/${item.type}/${item.id}`,
+        hasWikipedia: Boolean(tags["wikipedia"]),
+        hasWikidata: Boolean(tags["wikidata"]),
+        hasWebsite: Boolean(tags["website"] || tags["contact:website"]),
       });
     }
   } else if (curatedMatches.length > 0) {
@@ -340,6 +344,15 @@ export async function nearbyPlaces(
   }
   places.sort((a, b) => a.distanceKm - b.distanceKm);
   if (!degraded) await setCached(`nearby:${key}`, places, 86400);
+  return { places, degraded };
+}
+
+export async function nearbyPlaces(
+  center: Coordinate,
+  radiusKm = 5,
+  path: Coordinate[] = [],
+): Promise<NearbyPlace[]> {
+  const { places } = await nearbyPlacesWithMeta(center, radiusKm, path);
   return places;
 }
 

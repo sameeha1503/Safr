@@ -60,3 +60,23 @@ test("handoff uses the first mapped stop as origin for older saved plans", () =>
   assert.equal(JSON.parse(handoff.search.stops!).length, 1);
   assert.equal(handoff.includedStopCount, 3);
 });
+
+test("handoff in journey mode uses journey.start as origin and destination as end", () => {
+  const plan = itinerary(3);
+  plan.mode = "journey";
+  plan.journey = {
+    start: { lat: 15.49, lng: 73.82, name: "Panaji" },
+    destination: { lat: 15.68, lng: 73.7, name: "Arambol Beach" },
+    routeKm: 36,
+    routeMin: 55,
+  };
+  const handoff = itineraryMapHandoff(plan, "Arambol Beach");
+  assert.ok(handoff);
+  assert.equal(handoff.search.origin, "Panaji");
+  assert.equal(handoff.search.dest, "Arambol Beach");
+  const waypoints = JSON.parse(handoff.search.stops!);
+  assert.equal(waypoints.length, 3);
+  assert.equal(waypoints[0].name, "Stop 1");
+  assert.equal(handoff.includedStopCount, 3);
+  assert.equal(handoff.mappedStopCount, 3);
+});

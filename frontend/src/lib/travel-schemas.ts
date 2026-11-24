@@ -26,5 +26,9 @@ export const itineraryInputSchema = z.object({
     .optional(),
   notes: z.string().trim().max(400).optional(),
   origin: coordinateSchema.optional(),
+  start: coordinateSchema
+    .extend({ name: z.string().max(120).optional() })
+    .optional(),
+  destination: coordinateSchema.optional(),
   returnToStart: z.boolean().default(false),
 });

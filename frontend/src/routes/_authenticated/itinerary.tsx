@@ -35,6 +35,7 @@ import { GOA_PLACES, type Itinerary } from "@/lib/goa-schemas";
 import { generateItinerary, getCurrentArea } from "@/lib/goa.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { itineraryMapHandoff, parseSavedItinerary } from "@/lib/itinerary-map";
+import { itineraryMode } from "@/lib/itinerary-engine";
 
 export const Route = createFileRoute("/_authenticated/itinerary")({
   validateSearch: (
@@ -78,13 +79,19 @@ function ItineraryPage() {
     searchParams.place || "Anjuna Beach",
   );
   const [state, setState] = useState(searchParams.state || "Goa");
-  const [origin, setOrigin] = useState<
+  const [destinationCoords, setDestinationCoords] = useState<
     { lat: number; lng: number } | undefined
   >(() => resolvedCentre(searchParams.lat, searchParams.lng));
+  const [start, setStart] = useState<
+    { lat: number; lng: number; name?: string } | undefined
+  >(undefined);
+  const [startLocationName, setStartLocationName] = useState<string>("");
+  const [locatingStart, setLocatingStart] = useState(false);
+
   useEffect(() => {
     if (searchParams.place) setPlace(searchParams.place);
     if (searchParams.state) setState(searchParams.state);
-    setOrigin(resolvedCentre(searchParams.lat, searchParams.lng));
+    setDestinationCoords(resolvedCentre(searchParams.lat, searchParams.lng));
   }, [
     searchParams.place,
     searchParams.state,
@@ -92,14 +99,14 @@ function ItineraryPage() {
     searchParams.lng,
   ]);
   const [returnToStart, setReturnToStart] = useState(false);
-  const [locating, setLocating] = useState(false);
   const currentArea = useServerFn(getCurrentArea);
-  const handleCurrentLocation = () => {
+
+  const handleCurrentStartLocation = () => {
     if (!navigator.geolocation) {
       toast.error("Location is unavailable in this browser");
       return;
     }
-    setLocating(true);
+    setLocatingStart(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
@@ -109,23 +116,27 @@ function ItineraryPage() {
               lng: position.coords.longitude,
             },
           });
-          setPlace(result.name);
-          setState(result.state);
-          setOrigin({ lat: result.lat, lng: result.lng });
+          setStart({
+            lat: result.lat,
+            lng: result.lng,
+            name: result.name,
+          });
+          setStartLocationName(result.name);
+          toast.success(`Starting point set to ${result.name}`);
         } catch (error) {
           toast.error(
             error instanceof Error
               ? error.message
-              : "Could not detect your area",
+              : "Could not detect your start location",
           );
         } finally {
-          setLocating(false);
+          setLocatingStart(false);
         }
       },
       () => {
-        setLocating(false);
+        setLocatingStart(false);
         toast.error(
-          "Location permission unavailable. Enter a destination and state instead.",
+          "Location permission unavailable. Enter a starting area manually.",
         );
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
@@ -144,7 +155,7 @@ function ItineraryPage() {
     }
     setPlace(data.destination);
     setState("Goa");
-    setOrigin(undefined);
+    setDestinationCoords(undefined);
   };
   const [date, setDate] = useState<string>(getTodayDate());
   const [hours, setHours] = useState(6);
@@ -230,7 +241,9 @@ function ItineraryPage() {
           pace,
           startTime,
           notes: notes.trim() || undefined,
-          origin,
+          start,
+          destination: destinationCoords,
+          origin: start || destinationCoords,
           returnToStart,
         },
       })) as Itinerary;
@@ -285,7 +298,9 @@ function ItineraryPage() {
       setPace(saved.pace as "relaxed" | "balanced" | "packed");
     }
     setInterests(saved.interests);
-    setOrigin(saved.itinerary.origin);
+    setDestinationCoords(saved.itinerary.origin);
+    setStart(undefined);
+    setStartLocationName("");
     setReturnToStart((saved.itinerary.returnMinutes ?? 0) > 0);
     if (saved.itinerary.date && saved.itinerary.date >= getTodayDate()) {
       setDate(saved.itinerary.date);
@@ -371,14 +386,66 @@ function ItineraryPage() {
             <Sparkles className="size-6 text-primary" />
           </div>
 
-          {/* Location Dropdown */}
+          {/* Starting Location (Optional) */}
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="start-location"
+              className="font-semibold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+            >
+              <Navigation className="size-3.5 text-primary" /> Starting from
+              (optional)
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="start-location"
+                placeholder="Where you begin (leave empty to plan around destination)"
+                maxLength={120}
+                value={startLocationName}
+                onChange={(e) => {
+                  setStartLocationName(e.target.value);
+                  if (!e.target.value) {
+                    setStart(undefined);
+                  } else if (start) {
+                    setStart({ ...start, name: e.target.value });
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={locatingStart}
+                onClick={handleCurrentStartLocation}
+              >
+                {locatingStart ? "Locating…" : "Use my current location"}
+              </Button>
+            </div>
+            {start && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-3.5 text-emerald-500" />
+                <span>
+                  Start GPS: {start.lat.toFixed(4)}, {start.lng.toFixed(4)}
+                </span>
+                <button
+                  type="button"
+                  className="underline text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setStart(undefined);
+                    setStartLocationName("");
+                  }}
+                >
+                  Clear start
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Destination */}
           <div className="space-y-1.5">
             <Label
               htmlFor="place"
               className="font-semibold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
             >
-              <MapPin className="size-3.5 text-primary" /> Destination or
-              Starting Area
+              <MapPin className="size-3.5 text-primary" /> Destination
             </Label>
             <Input
               id="place"
@@ -388,7 +455,7 @@ function ItineraryPage() {
               value={place}
               onChange={(e) => {
                 setPlace(e.target.value);
-                setOrigin(undefined);
+                setDestinationCoords(undefined);
               }}
             />
             <datalist id="goa-destinations">
@@ -404,20 +471,10 @@ function ItineraryPage() {
               value={state}
               onChange={(e) => {
                 setState(e.target.value);
-                setOrigin(undefined);
+                setDestinationCoords(undefined);
               }}
             />
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={locating}
-                onClick={handleCurrentLocation}
-              >
-                {locating
-                  ? "Finding your area…"
-                  : "Use my current location & state"}
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -426,11 +483,10 @@ function ItineraryPage() {
                 Use saved trip destination
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {origin
-                ? "The initial drive starts at the selected coordinates."
-                : "The initial drive starts at the mapped destination center."}{" "}
-              Times use the India time zone and driving routes.
+            <p className="text-xs font-medium text-primary pt-1">
+              {itineraryMode(start, destinationCoords) === "journey"
+                ? `Planning a trip from ${start?.name || "your starting point"} to ${place}`
+                : `Planning a day around ${place}`}
             </p>
             <label className="flex gap-2 text-sm pt-2">
               <input
@@ -611,7 +667,7 @@ function ItineraryPage() {
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={plan.isPending || locating}
+            disabled={plan.isPending || locatingStart}
             className="w-full h-12 rounded-full font-bold bg-primary text-primary-foreground shadow-md transition-all hover:scale-[1.01] active:scale-95"
           >
             {plan.isPending ? (
@@ -813,6 +869,21 @@ function ItineraryPage() {
                         <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                           {typeEmoji[stop.type] ?? "📍"} {stop.type}
                         </span>
+                        {stop.slot && (
+                          <span className="rounded-full bg-primary/15 text-primary border border-primary/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                            {stop.slot}
+                          </span>
+                        )}
+                        {stop.openStatus === "unknown" && (
+                          <span className="rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20 px-2 py-0.5 text-[10px] font-bold">
+                            Hours unconfirmed
+                          </span>
+                        )}
+                        {stop.detourMin != null && stop.detourMin > 0 && (
+                          <span className="rounded-full bg-secondary/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                            +{stop.detourMin}m detour
+                          </span>
+                        )}
 
                         {/* Real-time Crowd Indicator */}
                         {stop.crowdLevel && (
@@ -916,6 +987,13 @@ function ItineraryPage() {
                     <p className="mt-1 text-xs sm:text-sm text-muted-foreground leading-relaxed">
                       {stop.description}
                     </p>
+
+                    {stop.why && (
+                      <p className="mt-2 text-xs font-medium text-primary/90 bg-primary/5 px-2.5 py-1 rounded-lg w-fit">
+                        💡 <span className="font-semibold">Why this stop:</span>{" "}
+                        {stop.why}
+                      </p>
+                    )}
 
                     <p className="mt-2.5 text-xs font-semibold text-primary bg-primary/5 px-2.5 py-1 rounded-lg w-fit flex items-center gap-1.5">
                       <span>🛵</span>

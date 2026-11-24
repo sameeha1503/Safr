@@ -7,6 +7,7 @@ export function formatPlanTime(minutes: number) {
 }
 
 export interface PlanStop {
+  id?: string;
   time: string;
   title: string;
   type: "food" | "sight" | "activity" | "beach" | "rest" | "travel";
@@ -22,6 +23,10 @@ export interface PlanStop {
   transitMin?: number;
   sourceUrl?: string;
   crowdLevel?: "low" | "moderate" | "high";
+  slot?: "en-route" | "main" | "meal" | "sunset";
+  why?: string;
+  openStatus?: "open" | "unknown";
+  detourMin?: number;
 }
 
 export function scheduleItinerary(input: {

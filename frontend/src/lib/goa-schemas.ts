@@ -99,11 +99,37 @@ export const itinerarySchema = z.object({
         crowdLevel: z.enum(["low", "moderate", "high"]).optional(),
         distanceKm: z.number().optional(),
         transitMin: z.number().optional(),
+        slot: z.enum(["en-route", "main", "meal", "sunset"]).optional(),
+        why: z.string().optional(),
+        openStatus: z.enum(["open", "unknown"]).optional(),
+        detourMin: z.number().optional(),
       }),
     )
     .min(1)
     .max(12),
   tips: z.array(z.string()).min(2).max(6),
+  journey: z
+    .object({
+      start: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        name: z.string().optional(),
+      }),
+      destination: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        name: z.string().optional(),
+      }),
+      routeKm: z.number().optional(),
+      routeMin: z.number().optional(),
+      hazardZones: z.array(z.string()).optional(),
+      safetyNotes: z.array(z.string()).optional(),
+      routeLine: z.array(z.tuple([z.number(), z.number()])).optional(),
+      arriveAfterDark: z.boolean().optional(),
+      returnByText: z.string().optional(),
+    })
+    .optional(),
+  mode: z.enum(["journey", "anchor"]).optional(),
   liveWeather: z.string().optional(),
   liveSwell: z.string().optional(),
 });
