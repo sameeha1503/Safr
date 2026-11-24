@@ -13,7 +13,7 @@ export type HazardZone = {
 
 export async function fetchKnownHazardZones(): Promise<HazardZone[]> {
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await (supabaseAdmin as any)
       .from("known_hazard_zones")
       .select("id,lat,lng,radius_meters,label,kind,description,source_url");
     if (error || !data) return [];

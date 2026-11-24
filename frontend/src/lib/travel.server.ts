@@ -161,12 +161,22 @@ export async function buildItinerary(
     ...curatedNear.filter((p) => !existingIds.has(p.id)),
   ];
 
-  const countSources = (items: { id?: string; sourceUrl?: string }[]) => {
+  const countSources = (
+    items: {
+      id?: string | undefined;
+      sourceUrl?: string | undefined;
+      source?: string | undefined;
+    }[],
+  ) => {
     let curated = 0;
     let osm = 0;
+    let catalogue = 0;
     for (const item of items) {
-      if (
+      if (item.source === "catalogue") {
+        catalogue++;
+      } else if (
         item.id?.startsWith("curated/") ||
+        item.source === "curated" ||
         (item.sourceUrl && !item.sourceUrl.includes("openstreetmap.org"))
       ) {
         curated++;
@@ -174,19 +184,19 @@ export async function buildItinerary(
         osm++;
       }
     }
-    return { curated, osm, total: items.length };
+    return { curated, osm, catalogue, total: items.length };
   };
 
-  // Stage 1: after Overpass parsing
+  // Stage 1: after Overpass/catalogue parsing
   const stage1 = countSources([...destPlaces, ...corridorCandidates]);
   console.log(
-    `[itinerary] Stage 1 (after Overpass parsing): total=${stage1.total} (curated: ${stage1.curated}, OSM: ${stage1.osm})`,
+    `[itinerary] Stage 1 (after place parsing): total=${stage1.total} (catalogue: ${stage1.catalogue}, curated: ${stage1.curated}, OSM: ${stage1.osm})`,
   );
 
   // Stage 2: after merging curated places
   const stage2 = countSources(places);
   console.log(
-    `[itinerary] Stage 2 (after merging curated places): total=${stage2.total} (curated: ${stage2.curated}, OSM: ${stage2.osm})`,
+    `[itinerary] Stage 2 (after merging curated places): total=${stage2.total} (catalogue: ${stage2.catalogue}, curated: ${stage2.curated}, OSM: ${stage2.osm})`,
   );
 
   // 1. Prioritize user notes (specific desired works, attractions or activities)
@@ -283,7 +293,7 @@ export async function buildItinerary(
   // Stage 3: after interest filtering
   const stage3 = countSources(candidates);
   console.log(
-    `[itinerary] Stage 3 (after interest filtering): total=${stage3.total} (curated: ${stage3.curated}, OSM: ${stage3.osm})`,
+    `[itinerary] Stage 3 (after interest filtering): total=${stage3.total} (catalogue: ${stage3.catalogue}, curated: ${stage3.curated}, OSM: ${stage3.osm})`,
   );
 
   if (!candidates.length)
@@ -570,7 +580,7 @@ export async function buildItinerary(
   // Stage 6: final stops
   const stage6 = countSources(schedule.stops);
   console.log(
-    `[itinerary] Stage 6 (final stops): total=${stage6.total} (curated: ${stage6.curated}, OSM: ${stage6.osm})`,
+    `[itinerary] Stage 6 (final stops): total=${stage6.total} (catalogue: ${stage6.catalogue}, curated: ${stage6.curated}, OSM: ${stage6.osm})`,
   );
 
   if (!schedule.stops.length)
@@ -717,6 +727,7 @@ export async function buildItinerary(
     mode,
     journey: journeyData,
     tips,
+    degraded,
   });
 }
 

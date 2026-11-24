@@ -104,6 +104,7 @@ export const itinerarySchema = z.object({
         why: z.string().optional(),
         openStatus: z.enum(["open", "unknown"]).optional(),
         detourMin: z.number().optional(),
+        source: z.enum(["catalogue", "overpass", "curated"]).optional(),
       }),
     )
     .min(1)
@@ -131,6 +132,7 @@ export const itinerarySchema = z.object({
     })
     .optional(),
   mode: z.enum(["journey", "anchor"]).optional(),
+  degraded: z.boolean().optional(),
   liveWeather: z.string().optional(),
   liveSwell: z.string().optional(),
 });

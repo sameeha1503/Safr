@@ -7,31 +7,57 @@ nwr(area.goa)[name][shop];nwr(area.goa)[name][historic];
 nwr(area.goa)[name][natural];nwr(area.goa)[name][leisure];
 nwr(area.goa)[name][public_transport];nwr(area.goa)[name][railway=station];
 nwr(area.goa)[name][aeroway=aerodrome];);out center tags;`;
-const endpoint =
-  process.env.OVERPASS_URL ||
-  "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
-const url = new URL(endpoint);
-url.searchParams.set("data", query);
-const response = await fetch(url, {
-  headers: {
-    Accept: "application/json",
-    "User-Agent": "Safr/1.0 (Goa tourism catalogue)",
-  },
-  signal: AbortSignal.timeout(150000),
-});
-if (!response.ok) throw new Error(`OSM download failed: ${response.status}`);
-const result = await response.json();
-if (result.remark || !Array.isArray(result.elements) || !result.elements.length)
-  throw new Error(
-    result.remark || "Empty OSM response; keeping the previous catalogue.",
-  );
+const endpoints = [
+  process.env.OVERPASS_URL,
+  "https://overpass-api.de/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+].filter(Boolean);
+
+let result = null;
+for (const endpoint of endpoints) {
+  try {
+    console.log(`Trying Overpass endpoint: ${endpoint}`);
+    const url = new URL(endpoint);
+    url.searchParams.set("data", query);
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Safr/1.0 (Goa tourism catalogue)",
+      },
+      signal: AbortSignal.timeout(150000),
+    });
+    if (!response.ok) {
+      console.warn(`Endpoint ${endpoint} returned status ${response.status}`);
+      continue;
+    }
+    const data = await response.json();
+    if (data.remark && (!Array.isArray(data.elements) || !data.elements.length)) {
+      console.warn(`Endpoint ${endpoint} returned remark: ${data.remark}`);
+      continue;
+    }
+    if (Array.isArray(data.elements) && data.elements.length > 0) {
+      result = data;
+      console.log(`Success from ${endpoint}: ${data.elements.length} raw elements received.`);
+      break;
+    }
+  } catch (err) {
+    console.warn(`Endpoint ${endpoint} failed:`, err instanceof Error ? err.message : err);
+  }
+}
+
+if (!result || !Array.isArray(result.elements) || !result.elements.length) {
+  throw new Error("Empty OSM response from all endpoints; keeping the previous catalogue.");
+}
 const allowed = [
   "name",
   "name:en",
+  "description",
   "tourism",
   "amenity",
   "shop",
   "historic",
+  "heritage",
   "natural",
   "leisure",
   "public_transport",
@@ -43,6 +69,8 @@ const allowed = [
   "phone",
   "contact:phone",
   "cuisine",
+  "wikipedia",
+  "wikidata",
   "addr:city",
   "addr:street",
   "addr:housenumber",

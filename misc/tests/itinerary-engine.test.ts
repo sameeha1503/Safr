@@ -436,8 +436,8 @@ test("nearbyPlacesWithMeta returns degraded: true when Overpass fails, and plan 
   t.mock.method(console, "warn", () => {});
   t.mock.method(console, "error", () => {});
 
-  // 99.9 lat is unused so no cache collision
-  const res = await nearbyPlacesWithMeta({ lat: 15.6059, lng: 73.7388 }, 4.7);
+  // Point where catalogue has < 15 places so Overpass is invoked and tested for degraded fallback
+  const res = await nearbyPlacesWithMeta({ lat: 14.9, lng: 73.95 }, 4.7);
   assert.equal(
     res.degraded,
     true,
@@ -599,5 +599,96 @@ test("humanizeKind, humanizeCuisine, and cleanWhy convert raw OSM tags to human 
   assert.equal(
     cleanWhy("Temple · destination cluster highlight"),
     "Temple · in the main sightseeing cluster",
+  );
+});
+
+test("buildItinerary uses catalogue as primary source when Overpass is down (degraded: false)", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const urlStr = String(url);
+    if (urlStr.includes("overpass") || urlStr.includes("interpreter")) {
+      throw new Error("Overpass is completely down (mocked failure)");
+    }
+    if (urlStr.includes("photon.komoot.io")) {
+      return Response.json({
+        features: [
+          {
+            properties: {
+              osm_id: 1,
+              osm_type: "node",
+              name: "Chapora Fort",
+              state: "Goa",
+              countrycode: "in",
+            },
+            geometry: { coordinates: [73.7388, 15.6059] },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("/table/")) {
+      const match = urlStr.match(/driving\/([^?]+)/);
+      const count = match ? match[1].split(";").length : 10;
+      const durations = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 300 + Math.abs(i - j) * 60,
+        ),
+      );
+      const distances = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 800 + Math.abs(i - j) * 200,
+        ),
+      );
+      return Response.json({
+        code: "Ok",
+        durations,
+        distances,
+        sources: Array.from({ length: count }, () => ({ distance: 10 })),
+      });
+    }
+    return Response.json({});
+  });
+
+  const plan = await buildItinerary({
+    place: "Chapora Fort",
+    state: "Goa",
+    start: {
+      lat: 15.4989,
+      lng: 73.8278,
+      name: "Panjim",
+    },
+    destination: {
+      lat: 15.6059,
+      lng: 73.7388,
+      name: "Chapora Fort",
+    },
+    hours: 8,
+    startTime: "09:00",
+    date: "2026-11-24",
+    pace: "balanced",
+    interests: ["History & heritage", "Beaches & sunsets", "Local food"],
+    returnToStart: false,
+  });
+
+  assert.equal(
+    plan.degraded,
+    false,
+    "Plan should not be degraded when catalogue serves candidates",
+  );
+
+  const mainAndMealStops = plan.stops.filter(
+    (s) => s.slot === "main" || s.slot === "meal",
+  );
+  assert.ok(mainAndMealStops.length > 0, "Plan must have main or meal stops");
+  const catalogueStops = mainAndMealStops.filter(
+    (s) => s.source === "catalogue",
+  );
+  assert.ok(
+    catalogueStops.length > 0,
+    `Expected main/meal stops with source 'catalogue', got: ${JSON.stringify(
+      mainAndMealStops.map((s) => ({
+        title: s.title,
+        slot: s.slot,
+        source: s.source,
+      })),
+    )}`,
   );
 });

@@ -292,6 +292,7 @@ export function matchesInterest(p: NearbyPlace, interest: string): boolean {
         name.includes("cove")
       );
 
+    case "Culture & history":
     case "History & heritage":
       if (isRestaurant) return false;
       return (
@@ -741,9 +742,8 @@ export function cleanWhy(why: string): string {
   text = text.replace(/\bplace_of_worship\b/gi, "Temple");
   text = text.replace(/\bfast_food\b/gi, "quick bites");
   text = text.replace(/goan;seafood;curry/gi, "Goan seafood");
-  text = text.replace(
-    /\b([a-z]+);([a-z]+)(;[a-z]+)*\b/gi,
-    (match) => humanizeCuisine(match),
+  text = text.replace(/\b([a-z]+);([a-z]+)(;[a-z]+)*\b/gi, (match) =>
+    humanizeCuisine(match),
   );
   text = text.replace(
     /destination cluster highlight/gi,
@@ -784,12 +784,22 @@ export function planDay(input: PlanDayInput): PlanDayResult {
     2.5,
   );
 
-  const countSources = (items: { id?: string; sourceUrl?: string }[]) => {
+  const countSources = (
+    items: {
+      id?: string | undefined;
+      sourceUrl?: string | undefined;
+      source?: string | undefined;
+    }[],
+  ) => {
     let curated = 0;
     let osm = 0;
+    let catalogue = 0;
     for (const item of items) {
-      if (
+      if (item.source === "catalogue") {
+        catalogue++;
+      } else if (
         item.id?.startsWith("curated/") ||
+        item.source === "curated" ||
         (item.sourceUrl && !item.sourceUrl.includes("openstreetmap.org"))
       ) {
         curated++;
@@ -797,7 +807,7 @@ export function planDay(input: PlanDayInput): PlanDayResult {
         osm++;
       }
     }
-    return { curated, osm, total: items.length };
+    return { curated, osm, catalogue, total: items.length };
   };
 
   // Stage 4: Candidates after open/closed filtering
@@ -814,13 +824,13 @@ export function planDay(input: PlanDayInput): PlanDayResult {
   });
   const stage4 = countSources(openCandidates);
   console.log(
-    `[itinerary] Stage 4 (after open/closed filtering): total=${stage4.total} (curated: ${stage4.curated}, OSM: ${stage4.osm})`,
+    `[itinerary] Stage 4 (after open/closed filtering): total=${stage4.total} (catalogue: ${stage4.catalogue}, curated: ${stage4.curated}, OSM: ${stage4.osm})`,
   );
 
   // Stage 5: Candidates after cluster selection
   const stage5 = countSources(clusterPool);
   console.log(
-    `[itinerary] Stage 5 (after cluster selection): total=${stage5.total} (curated: ${stage5.curated}, OSM: ${stage5.osm})`,
+    `[itinerary] Stage 5 (after cluster selection): total=${stage5.total} (catalogue: ${stage5.catalogue}, curated: ${stage5.curated}, OSM: ${stage5.osm})`,
   );
 
   const slots = buildSlotPlan({
@@ -896,12 +906,22 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       }
     } else {
       // Main destination cluster (strictly non-food)
+      const existingMainStops = stops.filter(
+        (s) => s.slot === "main" && s.lat != null && s.lng != null,
+      );
+      const isWithinCluster = (p: NearbyPlace) =>
+        existingMainStops.length === 0 ||
+        existingMainStops.every(
+          (s) => distanceKm({ lat: s.lat!, lng: s.lng! }, p) <= 2.5,
+        );
+
       const nonFoodInCluster = clusterPool.filter(
         (p) =>
           !usedIds.has(p.id) &&
           p.category !== "hotel" &&
           p.category !== "restaurant" &&
-          !["restaurant", "cafe", "fast_food"].includes(p.kind),
+          !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
+          isWithinCluster(p),
       );
       if (nonFoodInCluster.length > 0) {
         pool = nonFoodInCluster;
@@ -911,7 +931,8 @@ export function planDay(input: PlanDayInput): PlanDayResult {
             !usedIds.has(p.id) &&
             p.category !== "hotel" &&
             p.category !== "restaurant" &&
-            !["restaurant", "cafe", "fast_food"].includes(p.kind),
+            !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
+            isWithinCluster(p),
         );
       }
     }
@@ -1095,6 +1116,9 @@ export function planDay(input: PlanDayInput): PlanDayResult {
                 : `${humanizeKind(chosen.place)} · in the main sightseeing cluster`,
       openStatus: chosen.openStatus === "unknown" ? "unknown" : "open",
       detourMin: chosen.detourMin,
+      source:
+        chosen.place.source ||
+        (chosen.place.id.startsWith("curated/") ? "curated" : "catalogue"),
     });
 
     usedIds.add(chosen.place.id);

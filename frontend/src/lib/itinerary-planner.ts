@@ -27,6 +27,7 @@ export interface PlanStop {
   why?: string;
   openStatus?: "open" | "unknown";
   detourMin?: number;
+  source?: "catalogue" | "overpass" | "curated";
 }
 
 export function scheduleItinerary(input: {
