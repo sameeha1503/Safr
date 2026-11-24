@@ -1,4 +1,3 @@
-import { SosPanicControl } from "@/components/sos/SosPanicControl";
 import { GuardianSafetyStatus } from "@/components/sos/GuardianSafetyStatus";
 import {
   Link,
@@ -117,7 +116,6 @@ export function AppShell({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <SosPanicControl localOnly={publicPage} />
             <div className="hidden md:block">
               <GoogleTranslate />
             </div>
