@@ -50,6 +50,132 @@ export interface PlanDayResult {
   endTime: string;
 }
 
+const DEDUPE_STOPWORDS = new Set([
+  "the",
+  "of",
+  "and",
+  "in",
+  "at",
+  "to",
+  "for",
+  "a",
+  "an",
+  "&",
+]);
+
+function getDedupeTokens(name: string): Set<string> {
+  const normalized = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[^\p{L}\p{N}\s]/gu, " "); // strip punctuation
+  const tokens = normalized
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && !DEDUPE_STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+function computeJaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) intersection++;
+  }
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const token of a) {
+    if (!b.has(token)) return false;
+  }
+  return true;
+}
+
+function areNearDuplicates(a: NearbyPlace, b: NearbyPlace): boolean {
+  const d = distanceKm(a, b);
+  if (d > 2.0) return false;
+
+  const tokensA = getDedupeTokens(a.name);
+  const tokensB = getDedupeTokens(b.name);
+  if (tokensA.size === 0 || tokensB.size === 0) {
+    return false;
+  }
+
+  // (b) within 2 km and token sets exactly equal
+  if (setsEqual(tokensA, tokensB)) {
+    return true;
+  }
+
+  // (a) within 350 m and Jaccard overlap >= 0.6
+  if (d <= 0.35) {
+    const jaccard = computeJaccard(tokensA, tokensB);
+    if (jaccard >= 0.6) return true;
+  }
+
+  return false;
+}
+
+function isCurated(p: NearbyPlace): boolean {
+  return p.source === "curated" || p.id.startsWith("curated/");
+}
+
+function compareDescription(a: NearbyPlace, b: NearbyPlace): number {
+  const aCurated = isCurated(a);
+  const bCurated = isCurated(b);
+  if (aCurated !== bCurated) return aCurated ? 1 : -1;
+
+  const aWiki = Boolean(a.hasWikipedia);
+  const bWiki = Boolean(b.hasWikipedia);
+  if (aWiki !== bWiki) return aWiki ? 1 : -1;
+
+  const aData = Boolean(a.hasWikidata);
+  const bData = Boolean(b.hasWikidata);
+  if (aData !== bData) return aData ? 1 : -1;
+
+  const aWeb = Boolean(a.hasWebsite);
+  const bWeb = Boolean(b.hasWebsite);
+  if (aWeb !== bWeb) return aWeb ? 1 : -1;
+
+  return 0;
+}
+
+export function dedupeNearDuplicates(places: NearbyPlace[]): NearbyPlace[] {
+  const result: NearbyPlace[] = [];
+
+  for (const place of places) {
+    const matchIdx = result.findIndex((existing) =>
+      areNearDuplicates(existing, place),
+    );
+    if (matchIdx === -1) {
+      result.push(place);
+    } else {
+      const existing = result[matchIdx]!;
+      if (compareDescription(place, existing) > 0) {
+        result[matchIdx] = place;
+      }
+    }
+  }
+
+  return result;
+}
+
+const NON_DINING_REGEX =
+  /\b(cook(ing|ery)|class(es)?|school|academy|institute|college|training|workshop|tuition|coaching)\b/i;
+
+export function isLikelyDining(place: { name: string }): boolean {
+  return !NON_DINING_REGEX.test(place.name);
+}
+
+const NIGHTLIFE_KINDS = new Set(["nightclub", "bar", "pub", "lounge"]);
+
+export function isNightlifeVenue(place: { kind?: string }): boolean {
+  return place.kind ? NIGHTLIFE_KINDS.has(place.kind.toLowerCase()) : false;
+}
+
 /**
  * Determine planning mode: journey when start exists and is >= 4 km from destination.
  */
@@ -927,6 +1053,9 @@ export function planDay(input: PlanDayInput): PlanDayResult {
         pool = input.destinationCandidates.filter(
           (p) =>
             !usedIds.has(p.id) &&
+            isLikelyDining(p) &&
+            ((input.interests || []).includes("Nightlife") ||
+              !isNightlifeVenue(p)) &&
             (p.category === "restaurant" ||
               ["restaurant", "cafe", "fast_food"].includes(p.kind)),
         );
@@ -967,31 +1096,49 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       const existingMainStops = stops.filter(
         (s) => s.slot === "main" && s.lat != null && s.lng != null,
       );
-      const isWithinCluster = (p: NearbyPlace) =>
+      const isWithinRadius = (p: NearbyPlace, maxKm: number) =>
         existingMainStops.length === 0 ||
         existingMainStops.every(
-          (s) => distanceKm({ lat: s.lat!, lng: s.lng! }, p) <= 2.5,
+          (s) => distanceKm({ lat: s.lat!, lng: s.lng! }, p) <= maxKm,
         );
 
-      const nonFoodInCluster = clusterPool.filter(
-        (p) =>
-          !usedIds.has(p.id) &&
-          p.category !== "hotel" &&
-          p.category !== "restaurant" &&
-          !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
-          isWithinCluster(p),
+      const isSchedulableNonFood = (p: NearbyPlace) =>
+        !usedIds.has(p.id) &&
+        p.category !== "hotel" &&
+        p.category !== "restaurant" &&
+        !["restaurant", "cafe", "fast_food", "food_court"].includes(p.kind);
+
+      // Try radius 2.5 km first: clusterPool, then destinationCandidates
+      let mainCandidates = clusterPool.filter(
+        (p) => isSchedulableNonFood(p) && isWithinRadius(p, 2.5),
       );
-      if (nonFoodInCluster.length > 0) {
-        pool = nonFoodInCluster;
-      } else {
-        pool = input.destinationCandidates.filter(
-          (p) =>
-            !usedIds.has(p.id) &&
-            p.category !== "hotel" &&
-            p.category !== "restaurant" &&
-            !["restaurant", "cafe", "fast_food"].includes(p.kind) &&
-            isWithinCluster(p),
+      if (mainCandidates.length === 0) {
+        mainCandidates = input.destinationCandidates.filter(
+          (p) => isSchedulableNonFood(p) && isWithinRadius(p, 2.5),
         );
+      }
+
+      // If no candidate qualifies, retry with 5 km: clusterPool first, then all destination candidates
+      if (mainCandidates.length === 0) {
+        mainCandidates = clusterPool.filter(
+          (p) => isSchedulableNonFood(p) && isWithinRadius(p, 5.0),
+        );
+        if (mainCandidates.length === 0) {
+          mainCandidates = input.destinationCandidates.filter(
+            (p) => isSchedulableNonFood(p) && isWithinRadius(p, 5.0),
+          );
+        }
+      }
+
+      pool = mainCandidates;
+    }
+
+    if (slotDef.slot !== "arrive" && slotDef.slot !== "meal") {
+      const allowNightlife =
+        (input.interests || []).includes("Nightlife") &&
+        slotDef.windowStartMin >= 19 * 60;
+      if (!allowNightlife) {
+        pool = pool.filter((p) => !isNightlifeVenue(p));
       }
     }
 
@@ -999,7 +1146,7 @@ export function planDay(input: PlanDayInput): PlanDayResult {
 
     // Estimate transit and arrival time
     // Sort pool by suitability score
-    const scored = pool
+    let scored = pool
       .map((place) => {
         let distKm = distanceKm(previousCoords, place);
         let transitMin = Math.max(3, Math.ceil(distKm * 2.5)) + buffer;
@@ -1073,6 +1220,13 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       // Detour limit <= 12 min for en-route
       .filter((c) => (slotDef.slot === "en-route" ? c.detourMin <= 12 : true))
       .sort((a, b) => b.score - a.score || a.distKm - b.distKm);
+
+    if (slotDef.slot === "meal") {
+      const near = scored.filter((c) => c.distKm <= 4.0);
+      if (near.length > 0) {
+        scored = near;
+      }
+    }
 
     if (scored.length === 0) continue;
 
@@ -1179,6 +1333,7 @@ export function planDay(input: PlanDayInput): PlanDayResult {
       source:
         chosen.place.source ||
         (chosen.place.id.startsWith("curated/") ? "curated" : "catalogue"),
+      kind: chosen.place.kind,
     });
 
     usedIds.add(chosen.place.id);

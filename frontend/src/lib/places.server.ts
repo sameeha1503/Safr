@@ -34,7 +34,7 @@ export async function fetchJson(
   const response = await fetch(url, {
     ...init,
     headers,
-    signal: AbortSignal.timeout(Math.min(timeout, 9000)),
+    signal: AbortSignal.timeout(Math.min(timeout, 20000)),
   });
   if (!response.ok)
     throw new Error(

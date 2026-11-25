@@ -11,6 +11,9 @@ import {
   humanizeKind,
   humanizeCuisine,
   cleanWhy,
+  dedupeNearDuplicates,
+  isLikelyDining,
+  isNightlifeVenue,
 } from "../../frontend/src/lib/itinerary-engine.ts";
 import { itinerarySchema } from "../../frontend/src/lib/goa-schemas.ts";
 import { nearbyPlacesWithMeta } from "../../frontend/src/lib/places.server.ts";
@@ -571,8 +574,8 @@ test("buildItinerary sets slot on all stops, confines food to meal windows, and 
           { lat: mainStops[j]!.lat!, lng: mainStops[j]!.lng! },
         );
         assert.ok(
-          d <= 2.5,
-          `Main stops "${mainStops[i]!.title}" and "${mainStops[j]!.title}" distance ${d.toFixed(2)} km exceeds 2.5 km cluster radius`,
+          d <= 5.0,
+          `Main stops "${mainStops[i]!.title}" and "${mainStops[j]!.title}" distance ${d.toFixed(2)} km exceeds 5.0 km cluster radius (preferred 2.5 km, hard limit 5 km)`,
         );
       }
     }
@@ -837,4 +840,345 @@ test("Vagator/Anjuna: all attraction/viewpoint/beach/historic places reach scori
     idsSortedAlpha,
     "Shortlist must be sorted by score, not by id",
   );
+});
+
+test("dedupeNearDuplicates merges near-identical places, merges identical places within 2km, keeps curated entry, and preserves separate places", () => {
+  const curatedPalolem: NearbyPlace = {
+    id: "curated/palolem_beach",
+    name: "Palolem Crescent Beach",
+    lat: 15.01,
+    lng: 74.023,
+    category: "attraction",
+    kind: "beach",
+    distanceKm: 0.1,
+    sourceUrl: "https://example.com/curated",
+    source: "curated",
+    hasWikipedia: true,
+  };
+  const osmPalolem: NearbyPlace = {
+    id: "relation/8111859",
+    name: "Palolem Beach",
+    lat: 15.0086,
+    lng: 74.0203, // ~200 m away
+    category: "attraction",
+    kind: "beach",
+    distanceKm: 0.2,
+    sourceUrl: "https://www.openstreetmap.org/relation/8111859",
+    source: "catalogue",
+  };
+  // Merges "Palolem Crescent Beach" / "Palolem Beach" (200 m apart) and keeps curated entry
+  const deduped1 = dedupeNearDuplicates([osmPalolem, curatedPalolem]);
+  assert.equal(deduped1.length, 1);
+  assert.equal(
+    deduped1[0]!.id,
+    "curated/palolem_beach",
+    "Must keep the curated entry",
+  );
+
+  const osmColva1: NearbyPlace = {
+    id: "node/493623284",
+    name: "Colva Beach",
+    lat: 15.2756,
+    lng: 73.9137,
+    category: "attraction",
+    kind: "beach",
+    distanceKm: 0.1,
+    sourceUrl: "https://www.openstreetmap.org/node/493623284",
+    source: "catalogue",
+  };
+  const osmColva2: NearbyPlace = {
+    id: "way/397058297",
+    name: "Colva Beach",
+    lat: 15.2853,
+    lng: 73.9101, // ~1.1 km away
+    category: "attraction",
+    kind: "beach",
+    distanceKm: 1.1,
+    sourceUrl: "https://www.openstreetmap.org/way/397058297",
+    source: "catalogue",
+  };
+  // Merges identical "Colva Beach" 1.1 km apart
+  const deduped2 = dedupeNearDuplicates([osmColva1, osmColva2]);
+  assert.equal(deduped2.length, 1);
+
+  const bagaBeach: NearbyPlace = {
+    id: "node/100",
+    name: "Baga Beach",
+    lat: 15.555,
+    lng: 73.751,
+    category: "attraction",
+    kind: "beach",
+    distanceKm: 0,
+    sourceUrl: "https://www.openstreetmap.org/node/100",
+    source: "catalogue",
+  };
+  const calanguteBeach: NearbyPlace = {
+    id: "node/200",
+    name: "Calangute Beach",
+    lat: 15.54,
+    lng: 73.755, // ~3 km away
+    category: "attraction",
+    kind: "beach",
+    distanceKm: 3.0,
+    sourceUrl: "https://www.openstreetmap.org/node/200",
+    source: "catalogue",
+  };
+  // Does NOT merge two different beaches 3 km apart
+  const deduped3 = dedupeNearDuplicates([bagaBeach, calanguteBeach]);
+  assert.equal(deduped3.length, 2);
+});
+
+test("8-hour balanced plans for Colva Beach and Anjuna Beach have >= 5 stops, no name duplicates, and main hops <= 5 km", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const urlStr = String(url);
+    if (urlStr.includes("overpass") || urlStr.includes("interpreter")) {
+      throw new Error("Overpass down");
+    }
+    if (urlStr.includes("photon.komoot.io")) {
+      const decoded = decodeURIComponent(urlStr).toLowerCase();
+      let name = "Place";
+      let lat = 15.2757;
+      let lng = 73.9137;
+      if (decoded.includes("anjuna")) {
+        name = "Anjuna Beach";
+        lat = 15.5847;
+        lng = 73.7438;
+      } else if (decoded.includes("colva")) {
+        name = "Colva Beach";
+        lat = 15.2757;
+        lng = 73.9137;
+      }
+      return Response.json({
+        features: [
+          {
+            properties: {
+              osm_id: 1,
+              osm_type: "node",
+              name,
+              state: "Goa",
+              countrycode: "in",
+            },
+            geometry: { coordinates: [lng, lat] },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("/table/")) {
+      const match = urlStr.match(/driving\/([^?]+)/);
+      const count = match ? match[1].split(";").length : 10;
+      const durations = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 300 + Math.abs(i - j) * 60,
+        ),
+      );
+      const distances = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 800 + Math.abs(i - j) * 200,
+        ),
+      );
+      return Response.json({
+        code: "Ok",
+        durations,
+        distances,
+        sources: Array.from({ length: count }, () => ({ distance: 20 })),
+      });
+    }
+    return Response.json({});
+  });
+
+  for (const place of ["Colva Beach", "Anjuna Beach"]) {
+    const plan = await buildItinerary({
+      place,
+      state: "Goa",
+      hours: 8,
+      startTime: "09:00",
+      date: "2026-11-25",
+      pace: "balanced",
+      interests: ["History & heritage", "Beaches & sunsets", "Local food"],
+      returnToStart: false,
+    });
+
+    assert.ok(
+      plan.stops.length >= 5,
+      `Plan for ${place} must have at least 5 stops, got ${plan.stops.length}`,
+    );
+
+    // None duplicated by name
+    const names = plan.stops.map((s) => s.title.toLowerCase().trim());
+    assert.equal(
+      new Set(names).size,
+      names.length,
+      `Plan for ${place} has duplicate stops: ${JSON.stringify(names)}`,
+    );
+
+    // No hop between main stops over 5 km
+    const mainStops = plan.stops.filter(
+      (s) => s.slot === "main" && s.lat != null && s.lng != null,
+    );
+    for (let i = 0; i < mainStops.length - 1; i++) {
+      const hop = distanceKm(
+        { lat: mainStops[i]!.lat!, lng: mainStops[i]!.lng! },
+        { lat: mainStops[i + 1]!.lat!, lng: mainStops[i + 1]!.lng! },
+      );
+      assert.ok(
+        hop <= 5.0,
+        `Main hop between "${mainStops[i]!.title}" and "${mainStops[i + 1]!.title}" is ${hop.toFixed(2)} km, exceeds 5 km`,
+      );
+    }
+  }
+});
+
+test("no stop of kind nightclub/bar/pub/lounge appears in a plan unless interests include 'Nightlife'", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const urlStr = String(url);
+    if (urlStr.includes("overpass") || urlStr.includes("interpreter")) {
+      throw new Error("Overpass down");
+    }
+    if (urlStr.includes("photon.komoot.io")) {
+      return Response.json({
+        features: [
+          {
+            properties: {
+              osm_id: 1,
+              osm_type: "node",
+              name: "Anjuna Beach",
+              state: "Goa",
+              countrycode: "in",
+            },
+            geometry: { coordinates: [73.7438, 15.5847] },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("/table/")) {
+      const match = urlStr.match(/driving\/([^?]+)/);
+      const count = match ? match[1].split(";").length : 10;
+      const durations = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 300 + Math.abs(i - j) * 60,
+        ),
+      );
+      const distances = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 800 + Math.abs(i - j) * 200,
+        ),
+      );
+      return Response.json({
+        code: "Ok",
+        durations,
+        distances,
+        sources: Array.from({ length: count }, () => ({ distance: 20 })),
+      });
+    }
+    return Response.json({});
+  });
+
+  const plan = await buildItinerary({
+    place: "Anjuna Beach",
+    state: "Goa",
+    hours: 8,
+    startTime: "09:00",
+    date: "2026-11-25",
+    pace: "balanced",
+    interests: ["History & heritage", "Beaches & sunsets", "Local food"],
+    returnToStart: false,
+  });
+
+  for (const stop of plan.stops) {
+    assert.equal(
+      isNightlifeVenue(stop),
+      false,
+      `Stop "${stop.title}" (kind: ${stop.kind}) must not be a nightlife venue`,
+    );
+  }
+});
+
+test("no meal stop name matches the non-dining pattern, and every meal is within 4 km of previous stop when such place exists", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const urlStr = String(url);
+    if (urlStr.includes("overpass") || urlStr.includes("interpreter")) {
+      throw new Error("Overpass down");
+    }
+    if (urlStr.includes("photon.komoot.io")) {
+      return Response.json({
+        features: [
+          {
+            properties: {
+              osm_id: 1,
+              osm_type: "node",
+              name: "Colva Beach",
+              state: "Goa",
+              countrycode: "in",
+            },
+            geometry: { coordinates: [73.9137, 15.2757] },
+          },
+        ],
+      });
+    }
+    if (urlStr.includes("/table/")) {
+      const match = urlStr.match(/driving\/([^?]+)/);
+      const count = match ? match[1].split(";").length : 10;
+      const durations = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 300 + Math.abs(i - j) * 60,
+        ),
+      );
+      const distances = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) =>
+          i === j ? 0 : 800 + Math.abs(i - j) * 200,
+        ),
+      );
+      return Response.json({
+        code: "Ok",
+        durations,
+        distances,
+        sources: Array.from({ length: count }, () => ({ distance: 20 })),
+      });
+    }
+    return Response.json({});
+  });
+
+  const plan = await buildItinerary({
+    place: "Colva Beach",
+    state: "Goa",
+    hours: 8,
+    startTime: "09:00",
+    date: "2026-11-25",
+    pace: "balanced",
+    interests: ["History & heritage", "Beaches & sunsets", "Local food"],
+    returnToStart: false,
+  });
+
+  const mealStops = plan.stops.filter(
+    (s) => s.slot === "meal" || s.type === "food",
+  );
+  assert.ok(mealStops.length > 0, "Plan must have a meal stop");
+
+  for (const meal of mealStops) {
+    assert.equal(
+      isLikelyDining(meal),
+      true,
+      `Meal stop "${meal.title}" must match dining pattern`,
+    );
+
+    const idx = plan.stops.indexOf(meal);
+    if (idx > 0) {
+      const prev = plan.stops[idx - 1]!;
+      if (
+        prev.lat != null &&
+        prev.lng != null &&
+        meal.lat != null &&
+        meal.lng != null
+      ) {
+        const d = distanceKm(
+          { lat: prev.lat, lng: prev.lng },
+          { lat: meal.lat, lng: meal.lng },
+        );
+        assert.ok(
+          d <= 4.0,
+          `Meal stop "${meal.title}" distance ${d.toFixed(2)} km from previous stop "${prev.title}" exceeds 4 km`,
+        );
+      }
+    }
+  }
 });
