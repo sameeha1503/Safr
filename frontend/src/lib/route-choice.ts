@@ -76,7 +76,7 @@ export function explainRouteChoice(
       );
     } else {
       reasons.push(
-        "The routes score the same on surface, road type, speed limits and lighting, so none is clearly safer.",
+        "The mapped road conditions do not show a clear, comparable difference between routes.",
       );
     }
     if (fastest.hazardZones.length > 0) {
@@ -123,7 +123,7 @@ export function explainRouteChoice(
     return {
       ...empty,
       verdict: "fastest-is-safest",
-      headline: "Fastest route is also the safest option",
+      headline: "Fastest route also has lower mapped road risk",
       reasons,
       hazardsOnRecommended: safer.hazardZones.map((z) => z.label),
     };
@@ -191,8 +191,8 @@ export function explainRouteChoice(
     verdict: "safer-alternative",
     headline:
       extraMinutes > 0
-        ? `A safer route is available, +${extraMinutes} min`
-        : "A safer route is available, no extra time",
+        ? `Lower risk on mapped road conditions, +${extraMinutes} min`
+        : "Lower risk on mapped road conditions, no extra time",
     reasons,
     hazardsOnRecommended: safer.hazardZones.map((z) => z.label),
     fastest,

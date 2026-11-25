@@ -357,9 +357,9 @@ export function useRoutePlanner({
       });
       if (!isSafestAlso && safestIdx !== -1) {
         comparisonCards.push({
-          title: "Road-condition preference",
+          title: "Lower risk",
           index: safestIdx,
-          detail: "Based on mapped road conditions; not a guarantee",
+          detail: "Lowest estimated exposure to mapped road conditions",
         });
       }
     } else {
@@ -384,9 +384,9 @@ export function useRoutePlanner({
       }
       if (!isFastestSafest && !isShortestSafest && safestIdx !== -1) {
         comparisonCards.push({
-          title: "Road-condition preference",
+          title: "Lower risk",
           index: safestIdx,
-          detail: "Based on mapped road conditions; not a guarantee",
+          detail: "Lowest estimated exposure to mapped road conditions",
         });
       }
     }

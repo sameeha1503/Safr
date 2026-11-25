@@ -111,6 +111,7 @@ export type ScoredRoute = {
   durationSeconds: number;
   safety: SafetyEvidence;
   hazardZones: HazardZone[];
+  hazardDataAvailable?: boolean;
   isFastest: boolean;
   isShortest: boolean;
   isSafest: boolean;
@@ -439,23 +440,15 @@ export async function computeSafeRoutes(
       mode,
       hazardZonesOnRoute(
         r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
-        hazardZonesAll,
+        hazardZonesAll ?? [],
       ),
     ),
   );
   const best = routePreferences(candidates);
-  let safestIndex = best.safest;
-  if (candidates.length > 1 && candidates.some((r) => r.hazardZones.length > 0)) {
-    const combinedScore = (r: (typeof candidates)[number]) =>
-      (r.safety.sufficient ? r.safety.mappedRiskExposure! : 0) +
-      r.hazardZones.length * 2;
-    const ranked = candidates
-      .map((r, i) => ({ i, score: combinedScore(r) }))
-      .sort((a, b) => a.score - b.score);
-    safestIndex = ranked[0]!.score < ranked[1]!.score ? ranked[0]!.i : -1;
-  }
+  const safestIndex = best.safest;
   return candidates.map((r, i) => ({
     ...r,
+    hazardDataAvailable: hazardZonesAll !== null,
     kind: i === best.fastest ? "fastest" : i === safestIndex ? "safer" : "alt",
     label:
       i === best.fastest ? "Fastest available route" : `Alternative ${i + 1}`,

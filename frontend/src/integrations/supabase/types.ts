@@ -14,6 +14,14 @@ export type Database = {
   };
   public: {
     Tables: {
+      known_hazard_zones: {
+        Row: import("../../lib/hazard-zones").HazardZone;
+        Insert: Omit<import("../../lib/hazard-zones").HazardZone, "id"> & {
+          id?: string;
+        };
+        Update: Partial<import("../../lib/hazard-zones").HazardZone>;
+        Relationships: [];
+      };
       road_reports: {
         Row: import("../../lib/road-reports").RoadReport;
         Insert: import("../../lib/road-reports").RoadReportInput & {

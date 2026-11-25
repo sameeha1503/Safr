@@ -176,8 +176,8 @@ export function assessRoadConditions(
 
   reasons.push(
     sufficient
-      ? "Safety preference estimates mapped surface, smoothness, road class, posted speeds and night lighting. It does not measure crashes, crime, traffic or current hazards."
-      : "Insufficient mapped conditions to identify a safest route. No safety score is assigned.",
+      ? "The road-condition estimate uses mapped surface, smoothness, road class and posted speeds. At night, unlit segments count when lighting coverage is sufficient."
+      : "Road-condition coverage is insufficient for a lower-risk comparison.",
   );
 
   return {
@@ -214,7 +214,17 @@ export function routePreferences<
   );
   // A safety winner requires multiple comparable candidates and a strictly better result.
   let safest = -1;
-  if (routes.length > 1 && routes.every((r) => r.safety.sufficient)) {
+  const lightingUsed = (r: T) => r.safety.exposure?.unlitKm != null;
+  if (
+    routes.length > 1 &&
+    routes.every(
+      (r) =>
+        r.safety.sufficient &&
+        r.safety.mappedRiskExposure !== null &&
+        Number.isFinite(r.safety.mappedRiskExposure) &&
+        lightingUsed(r) === lightingUsed(routes[0]!),
+    )
+  ) {
     const ordered = [...indexes].sort(
       (a, b) =>
         routes[a]!.safety.mappedRiskExposure! -
