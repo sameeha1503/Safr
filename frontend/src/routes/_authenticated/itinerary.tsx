@@ -243,7 +243,7 @@ function ItineraryPage() {
           notes: notes.trim() || undefined,
           start,
           destination: destinationCoords,
-          origin: start || destinationCoords,
+          origin: destinationCoords,
           returnToStart,
         },
       })) as Itinerary;
@@ -730,10 +730,20 @@ function ItineraryPage() {
                 <span className="rounded-full bg-primary/10 text-primary px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                   Time-Budgeted Schedule
                 </span>
-                <span className="rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold">
-                  {result.aiStatus === "used"
-                    ? "AI-assisted plan"
-                    : "Map-based plan"}
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                    (result.aiStatus || "not_configured") === "used"
+                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                      : (result.aiStatus || "not_configured") === "unavailable"
+                        ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
+                        : "bg-secondary text-muted-foreground border-border/60"
+                  }`}
+                >
+                  {(result.aiStatus || "not_configured") === "used"
+                    ? "AI-selected stops"
+                    : (result.aiStatus || "not_configured") === "unavailable"
+                      ? "AI unavailable, using built-in ranking"
+                      : "AI not configured"}
                 </span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold font-display text-foreground mt-1.5">

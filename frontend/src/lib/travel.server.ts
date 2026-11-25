@@ -25,6 +25,9 @@ import {
   humanizeKind,
   humanizeCuisine,
   cleanWhy,
+  dedupeNearDuplicates,
+  isLikelyDining,
+  isNightlifeVenue,
   type CandidateScoreContext,
 } from "./itinerary-engine";
 import { scheduleItinerary, formatPlanTime } from "./itinerary-planner";
@@ -40,9 +43,10 @@ export async function buildItinerary(
   raw: z.input<typeof itineraryInputSchema>,
 ) {
   const input = itineraryInputSchema.parse(raw);
+  // `origin` is a legacy single-point anchor and must never stand in for the destination when a separate start exists.
   const destination =
     input.destination ||
-    input.origin ||
+    (input.start ? undefined : input.origin) ||
     (await locatePlace(input.place, input.state));
   const start = input.start;
   const mode = itineraryMode(start, destination);
@@ -157,10 +161,11 @@ export async function buildItinerary(
     distanceKm: distanceKm(destination, p),
   })).filter((p) => p.distanceKm <= searchRadius * 1.5);
   const existingIds = new Set(destPlaces.map((p) => p.id));
-  const places = [
+  const rawPlaces = [
     ...destPlaces,
     ...curatedNear.filter((p) => !existingIds.has(p.id)),
   ];
+  const places = dedupeNearDuplicates(rawPlaces);
 
   const countSources = (
     items: {
@@ -292,7 +297,7 @@ export async function buildItinerary(
   // Round-robin interest allocation so every selected interest gets 3-4 top candidates
   const quotaPerInterest = Math.max(
     2,
-    Math.floor(16 / Math.max(1, input.interests.length)),
+    Math.floor(28 / Math.max(1, input.interests.length)),
   );
   for (const [_, bucket] of selectedInterestBuckets) {
     let taken = 0;
@@ -305,7 +310,7 @@ export async function buildItinerary(
     }
   }
 
-  // Fill remaining slots up to 20 with highest-scoring remaining places
+  // Fill remaining slots up to 40 with highest-scoring remaining places
   const remainingPool = places
     .filter((p) => p.category !== "hotel" && !candidateSet.has(p.id))
     .sort(
@@ -315,11 +320,11 @@ export async function buildItinerary(
     );
 
   for (const p of remainingPool) {
-    if (candidates.length >= 20) break;
+    if (candidates.length >= 40) break;
     addCandidate(p);
   }
 
-  // Final ~20-candidate shortlist sorted by scoreCandidate (highest first), never by catalogue order or id
+  // Final ~40-candidate shortlist sorted by scoreCandidate (highest first), never by catalogue order or id
   candidates.sort(
     (a, b) =>
       scoreCandidate(b, scoreCtx) - scoreCandidate(a, scoreCtx) ||
@@ -381,8 +386,10 @@ export async function buildItinerary(
     } else if (s.slot === "meal") {
       pool = candidates.filter(
         (p) =>
-          p.category === "restaurant" ||
-          ["restaurant", "cafe", "fast_food"].includes(p.kind),
+          isLikelyDining(p) &&
+          (input.interests.includes("Nightlife") || !isNightlifeVenue(p)) &&
+          (p.category === "restaurant" ||
+            ["restaurant", "cafe", "fast_food"].includes(p.kind)),
       );
     } else if (s.slot === "sunset") {
       pool = candidates.filter(
@@ -397,6 +404,14 @@ export async function buildItinerary(
         pool = candidates.filter((p) => p.category !== "hotel");
     } else {
       pool = candidates.filter((p) => p.category !== "hotel");
+    }
+
+    if (s.slot !== "arrive" && s.slot !== "meal") {
+      const allowNightlife =
+        input.interests.includes("Nightlife") && s.windowStartMin >= 19 * 60;
+      if (!allowNightlife) {
+        pool = pool.filter((p) => !isNightlifeVenue(p));
+      }
     }
 
     const shortlist = pool
@@ -519,7 +534,7 @@ export async function buildItinerary(
             },
           }),
         },
-        30000,
+        15000,
       )) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const answer =
         response.candidates?.[0]?.content?.parts
@@ -546,7 +561,9 @@ export async function buildItinerary(
             }
           }
         }
-        aiStatus = "used";
+        if (Object.keys(slotSelections).length > 0) {
+          aiStatus = "used";
+        }
       } else if (Array.isArray(parsedJson?.orderedIds)) {
         const valid = new Set(candidates.map((p) => p.id));
         if (parsedJson.orderedIds.some((id: string) => !valid.has(id))) {
@@ -563,6 +580,7 @@ export async function buildItinerary(
         aiStatus = "used";
       }
     } catch (error) {
+      aiStatus = "unavailable";
       const status =
         error instanceof Error
           ? error.message.match(/\((\d{3})\)/)?.[1]

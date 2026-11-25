@@ -25,8 +25,34 @@ export function ItinerarySummary({
       ? [{ label: "Time to spare", value: `${itinerary.unusedMinutes} min` }]
       : []),
   ];
+
+  const aiStatus = itinerary.aiStatus || "not_configured";
+  const aiBadgeText =
+    aiStatus === "used"
+      ? "AI-selected stops"
+      : aiStatus === "unavailable"
+        ? "AI unavailable, using built-in ranking"
+        : "AI not configured";
+  const aiBadgeClass =
+    aiStatus === "used"
+      ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+      : aiStatus === "unavailable"
+        ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
+        : "bg-secondary text-muted-foreground border-border/60";
+
   return (
     <div className="mt-5 space-y-4">
+      {/* Title & AI Status Badge */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3">
+        <h3 className="text-base sm:text-lg font-bold font-display text-foreground">
+          {itinerary.title}
+        </h3>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${aiBadgeClass}`}
+        >
+          {aiBadgeText}
+        </span>
+      </div>
       {/* Journey Header */}
       {itinerary.journey && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
