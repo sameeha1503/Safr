@@ -15,6 +15,7 @@ import {
   hazardZonesOnRoute,
   type HazardZone,
 } from "./hazard-zones.server";
+import { roadWaysFromSnapshot } from "./goa-road-tags.server";
 
 export type PlaceHit = {
   id: string;
@@ -388,14 +389,14 @@ export async function fetchRoadWays(bounds: string): Promise<RoadWay[]> {
 
   const query = `[out:json][timeout:10];way(${bounds})[highway][highway!~"^(footway|path|steps|cycleway|pedestrian|track|bridleway|corridor|elevator|proposed|construction|service)$"];out body qt;`;
 
-  const totalDeadline = Date.now() + 20000;
+  const totalDeadline = Date.now() + 6000;
   const reasons: string[] = [];
 
   for (const endpoint of endpoints) {
     const now = Date.now();
     const remainingTotal = totalDeadline - now;
     if (remainingTotal <= 0) {
-      reasons.push("Total timeout of 20s exceeded");
+      reasons.push("Total timeout of 6s exceeded");
       break;
     }
 
@@ -507,7 +508,7 @@ export async function fetchRoadWaysByIds(ids: number[]): Promise<RoadWay[]> {
     chunks.push(ids.slice(i, i + 400));
   }
 
-  const overallDeadline = Date.now() + 22000;
+  const overallDeadline = Date.now() + 6000;
   const reasons: string[] = [];
   const ways: RoadWay[] = [];
   let successfulHostname = "";
@@ -519,7 +520,7 @@ export async function fetchRoadWaysByIds(ids: number[]): Promise<RoadWay[]> {
     for (const endpoint of endpoints) {
       const remainingTotal = overallDeadline - Date.now();
       if (remainingTotal <= 0) {
-        reasons.push("Total timeout of 22s exceeded");
+        reasons.push("Total timeout of 6s exceeded");
         break;
       }
 
@@ -669,7 +670,15 @@ export async function computeSafeRoutes(
     );
 
     if (ids.length > 0) {
-      ways = await fetchRoadWaysByIds(ids);
+      const snapshotWays = roadWaysFromSnapshot(ids);
+      console.log(
+        `[routing] road tags from snapshot: ${snapshotWays.length}/${ids.length} ways`,
+      );
+      if (snapshotWays.length > 0) {
+        ways = snapshotWays;
+      } else {
+        ways = await fetchRoadWaysByIds(ids);
+      }
     } else {
       const points = unique.flatMap((r) =>
         r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
