@@ -55,6 +55,18 @@ npm run dev
 
 The dev server opens at `http://localhost:5173`.
 
+On Windows, run `run-safr.bat` from the repository root to start the app, its
+backend server functions, and a local Supabase database together. You need
+Node.js 24 and a running Docker Desktop engine. The launcher uses the
+Supabase CLI from PATH or downloads it through npm, applies local migrations,
+and points Safr at the local database for that session. Use `run-safr.bat -Install`
+to reinstall frontend dependencies and `run-safr.bat -Stop` to stop Supabase.
+Double-clicking opens Safr in your default browser. If Docker is unavailable,
+the launcher uses the hosted project from `frontend/.env`. Use
+`run-safr.bat -Local` to require a local database.
+Create a separate local test account and check the local mail inbox printed by
+the launcher for its confirmation email.
+
 ## ⚙️ Configuration
 
 At minimum, set these in `frontend/.env`:

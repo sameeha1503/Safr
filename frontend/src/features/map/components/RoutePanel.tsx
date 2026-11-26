@@ -237,7 +237,6 @@ export function RoutePanel({
 
       {routes.length > 0 && currentRoute && (
         <div className="space-y-4">
-          <RouteEvidence route={currentRoute} />
           <p className="text-xs text-muted-foreground px-1">
             {travelMode === "walking"
               ? "Walking"
@@ -245,6 +244,16 @@ export function RoutePanel({
                 ? "Cycling"
                 : "Driving"}{" "}
             estimate · no live traffic. Compare routes below.
+          </p>
+          {currentRoute.hazardDataAvailable === false && (
+            <p role="status" className="text-xs text-muted-foreground">
+              Accident zone data is unavailable for this route search.
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {routes.some((route) => route.isSafest)
+              ? "Lower risk compares mapped surface, smoothness, road class and speed limits, plus lighting at night when comparable. It does not predict crashes."
+              : "No lower-risk option identified. A clear difference and comparable road data are required."}
           </p>
           {/* Comparison Cards */}
           <div className="grid gap-2">
@@ -280,9 +289,9 @@ export function RoutePanel({
                     <span className="font-bold text-xs text-foreground">
                       {choice.title}
                     </span>
-                    {choice.alsoSafest && (
+                    {r.isSafest && choice.title !== "Lower risk" && (
                       <span className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold">
-                        Road preference
+                        Lower risk
                       </span>
                     )}
                   </div>
@@ -294,10 +303,23 @@ export function RoutePanel({
                   <span className="block mt-0.5 text-[11px] text-muted-foreground">
                     {choice.detail}
                   </span>
+                  {r.hazardZones.length > 0 && (
+                    <span className="mt-2 block rounded-lg border border-amber-600/40 bg-amber-500/10 px-2 py-1.5 text-xs">
+                      <strong>
+                        ⚠ Accident-prone zone
+                        {r.hazardZones.length === 1 ? "" : "s"}
+                      </strong>
+                      <span className="block">
+                        Route passes within the mapped zone radius:{" "}
+                        {r.hazardZones.map((zone) => zone.label).join(", ")}.
+                      </span>
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
+          <RouteEvidence route={currentRoute} />
 
           {/* Active Route Details Card */}
           <div className="rounded-3xl border border-border/60 bg-card/90 backdrop-blur-xl p-5 shadow-xs space-y-4">

@@ -43,6 +43,7 @@ export function useMapInstance({
   );
 
   const appliedStyleIdRef = useRef<string>(activeStyleId);
+  const watchBasemapRef = useRef<(() => void) | null>(null);
 
   // Callbacks and state in refs for map events
   const activeStyleIdRef = useRef(activeStyleId);
@@ -73,14 +74,8 @@ export function useMapInstance({
     if (map) {
       appliedStyleIdRef.current = "osm";
       onStyleChangeRef.current("osm");
-      map.setStyle(OSM_RASTER_STYLE);
-      clearTimeout(loadTimer.current);
-      loadTimer.current = setTimeout(() => {
-        if (!map.isStyleLoaded()) {
-          setMapLoadError(true);
-          setIsLoadingMap(false);
-        }
-      }, 12000);
+      map.setStyle(OSM_RASTER_STYLE, { diff: false });
+      watchBasemapRef.current?.();
     } else setRetrySeed((value) => value + 1);
   }, []);
 
@@ -115,32 +110,51 @@ export function useMapInstance({
 
         mapRef.current = map;
 
-        // Resilient fallback timer: only auto-fallbacks if style fails to initialize within 12 seconds
-        loadTimer.current = setTimeout(() => {
-          if (!map.isStyleLoaded()) {
-            console.warn(
-              "[map] Style initialization timed out, falling back to OSM standard tiles...",
-            );
-            try {
-              appliedStyleIdRef.current = "osm";
-              onStyleChangeRef.current("osm");
-              map.setStyle(OSM_RASTER_STYLE);
-              loadTimer.current = setTimeout(() => {
-                if (!map.isStyleLoaded()) {
-                  setMapLoadError(true);
-                  setIsLoadingMap(false);
-                }
-              }, 12000);
-            } catch {
-              setMapLoadError(true);
-              setIsLoadingMap(false);
+        let basemapSources = new Set<string>();
+        let awaitingTiles = false;
+        const showTileError = () => {
+          setMapLoadError(true);
+          setIsLoadingMap(false);
+        };
+        const watchBasemap = () => {
+          clearTimeout(loadTimer.current);
+          basemapSources = new Set();
+          awaitingTiles = true;
+          setMapLoadError(false);
+          setIsLoadingMap(true);
+          loadTimer.current = setTimeout(() => {
+            if (appliedStyleIdRef.current === "osm") {
+              showTileError();
+              return;
             }
-          } else {
-            setIsLoadingMap(false);
-            setMapLoadError(false);
-            setReady(true);
-          }
-        }, 12000);
+            appliedStyleIdRef.current = "osm";
+            onStyleChangeRef.current("osm");
+            try {
+              map.setStyle(OSM_RASTER_STYLE, { diff: false });
+              watchBasemap();
+            } catch {
+              showTileError();
+            }
+          }, 8000);
+        };
+        watchBasemapRef.current = watchBasemap;
+        map.on("styledataloading", watchBasemap);
+        watchBasemap();
+
+        map.on("sourcedata", (event) => {
+          // A completed tile request includes a tile coordinate. Source
+          // metadata and catalogue clusters cannot mark the basemap ready.
+          if (
+            !awaitingTiles ||
+            !event.coord ||
+            !basemapSources.has(event.sourceId)
+          )
+            return;
+          awaitingTiles = false;
+          clearTimeout(loadTimer.current);
+          setMapLoadError(false);
+          setIsLoadingMap(false);
+        });
 
         map.addControl(
           new ml.NavigationControl({ showCompass: true, showZoom: true }),
@@ -226,26 +240,24 @@ export function useMapInstance({
 
         // Style load handler (single place where layers are restored)
         map.on("style.load", () => {
-          clearTimeout(loadTimer.current);
-          setIsLoadingMap(false);
-          setMapLoadError(false);
-          setReady(true);
-
           const curStyle =
-            MAP_STYLES.find((s) => s.id === activeStyleIdRef.current) ??
+            MAP_STYLES.find((s) => s.id === appliedStyleIdRef.current) ??
             MAP_STYLES[0]!;
+          const sources = Object.entries(map.getStyle().sources);
+          basemapSources = new Set(
+            sources
+              .filter(
+                ([, source]) =>
+                  source.type === (curStyle.isVector ? "vector" : "raster"),
+              )
+              .map(([id]) => id),
+          );
+          setReady(true);
           addCustomLayers(map, {
             is3d: is3dRef.current,
             isVector: curStyle.isVector,
             routeDataFn: () => routeDataFnRef.current(),
           });
-        });
-
-        map.on("load", () => {
-          clearTimeout(loadTimer.current);
-          setIsLoadingMap(false);
-          setMapLoadError(false);
-          setReady(true);
         });
 
         if (onMapInitRef.current) {
@@ -261,6 +273,7 @@ export function useMapInstance({
 
     return () => {
       cancelled = true;
+      watchBasemapRef.current = null;
       clearTimeout(loadTimer.current);
       mapRef.current?.remove();
       mapRef.current = null;

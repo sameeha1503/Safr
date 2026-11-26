@@ -74,7 +74,7 @@ export function TrackingMap({
     if (!map || !entry || !ready) return;
     if (appliedStyleIdRef.current !== style) {
       appliedStyleIdRef.current = style;
-      map.setStyle(entry.style);
+      map.setStyle(entry.style, { diff: false });
     } else if (map.isStyleLoaded())
       addCustomLayers(map, { is3d, isVector: entry.isVector });
     map.easeTo({ pitch: is3d ? 45 : 0, duration: 400 });

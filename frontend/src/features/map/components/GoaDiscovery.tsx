@@ -1,10 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  GeoJSONSource,
-  Map as MapLibreMap,
-  MapMouseEvent,
-} from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { Search, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,11 +16,6 @@ import {
 } from "../lib/goa-catalogue";
 import type { PickedPlace } from "../lib/place-picking";
 
-const SOURCE = "safr-discovery";
-const POINTS = "safr-discovery-points";
-const CLUSTERS = "safr-discovery-clusters";
-const COUNT = "safr-discovery-count";
-
 export function GoaDiscovery({
   map,
   onPick,
@@ -36,8 +27,6 @@ export function GoaDiscovery({
   const [essential, setEssential] = useState<EssentialFilter | "All">("All");
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(20);
-  const pickRef = useRef(onPick);
-  pickRef.current = onPick;
   const { data, isPending, isError, refetch } = useQuery<GoaCatalogue>({
     queryKey: ["goa-catalogue"],
     queryFn: async ({ signal }) => {
@@ -62,142 +51,6 @@ export function GoaDiscovery({
         ),
     [data, category, query, essential],
   );
-  const features = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
-    () => ({
-      type: "FeatureCollection",
-      features: filtered.map((place) => ({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [place.lng, place.lat] },
-        properties: { id: place.id, category: catalogueCategory(place) },
-      })),
-    }),
-    [filtered],
-  );
-
-  useEffect(() => {
-    if (!map) return;
-    let cancelled = false;
-    const sync = () => {
-      if (!map.isStyleLoaded()) return;
-      const source = map.getSource(SOURCE) as GeoJSONSource | undefined;
-      if (source) source.setData(features);
-      else
-        map.addSource(SOURCE, {
-          type: "geojson",
-          data: features,
-          cluster: true,
-          clusterRadius: 45,
-          clusterMaxZoom: 13,
-          attribution:
-            '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors · ODbL</a>',
-        });
-      if (!map.getLayer(CLUSTERS))
-        map.addLayer({
-          id: CLUSTERS,
-          type: "circle",
-          source: SOURCE,
-          filter: ["has", "point_count"],
-          paint: {
-            "circle-color": "#087f8c",
-            "circle-radius": 20,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
-          },
-        });
-      if (!map.getLayer(POINTS))
-        map.addLayer({
-          id: POINTS,
-          type: "circle",
-          source: SOURCE,
-          filter: ["!", ["has", "point_count"]],
-          paint: {
-            "circle-radius": 7,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
-            "circle-color": [
-              "match",
-              ["get", "category"],
-              "Beaches",
-              "#0284c7",
-              "Food & drink",
-              "#ea580c",
-              "Stays",
-              "#7c3aed",
-              "Nature",
-              "#15803d",
-              "Attractions",
-              "#be185d",
-              "#087f8c",
-            ],
-          },
-        });
-      // Raster styles have no glyph endpoint; the circles remain interactive there.
-      if (map.getStyle().glyphs && !map.getLayer(COUNT))
-        map.addLayer({
-          id: COUNT,
-          type: "symbol",
-          source: SOURCE,
-          filter: ["has", "point_count"],
-          layout: {
-            "text-field": "{point_count_abbreviated}",
-            "text-font": ["Noto Sans Regular"],
-            "text-size": 12,
-          },
-          paint: { "text-color": "#ffffff" },
-        });
-    };
-    const click = async (event: MapMouseEvent) => {
-      const layers = [CLUSTERS, POINTS].filter((id) => map.getLayer(id));
-      if (!layers.length) return;
-      const feature = map.queryRenderedFeatures(event.point, { layers })[0];
-      if (!feature || feature.geometry.type !== "Point") return;
-      if (feature.properties["cluster"]) {
-        try {
-          const source = map.getSource(SOURCE) as GeoJSONSource;
-          const zoom = await source.getClusterExpansionZoom(
-            Number(feature.properties["cluster_id"]),
-          );
-          if (!cancelled)
-            map.easeTo({
-              center: feature.geometry.coordinates as [number, number],
-              zoom,
-            });
-        } catch {
-          /* Style was changed during cluster expansion. */
-        }
-      } else {
-        const place = filtered.find((p) => p.id === feature.properties["id"]);
-        if (place) pickRef.current(cataloguePickedPlace(place));
-      }
-    };
-    const hover = (event: MapMouseEvent) => {
-      const layers = [CLUSTERS, POINTS].filter((id) => map.getLayer(id));
-      if (
-        layers.length &&
-        map.queryRenderedFeatures(event.point, { layers }).length
-      )
-        map.getCanvas().style.cursor = "pointer";
-    };
-    sync();
-    map.on("style.load", sync);
-    map.on("idle", syncOnce);
-    function syncOnce() {
-      if (!map?.getSource(SOURCE)) sync();
-    }
-    map.on("click", click);
-    map.on("mousemove", hover);
-    return () => {
-      cancelled = true;
-      map.off("style.load", sync);
-      map.off("idle", syncOnce);
-      map.off("click", click);
-      map.off("mousemove", hover);
-      for (const id of [COUNT, POINTS, CLUSTERS])
-        if (map.getLayer(id)) map.removeLayer(id);
-      if (map.getSource(SOURCE)) map.removeSource(SOURCE);
-    };
-  }, [map, features, filtered]);
-
   function select(place: PickedPlace) {
     onPick(place);
     map?.flyTo({

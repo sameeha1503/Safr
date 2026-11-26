@@ -10,10 +10,10 @@ export function RouteEvidence({ route }: { route: ScoredRoute }) {
         Road evidence & offline trip
       </summary>
       <p className="my-2 text-xs text-muted-foreground">
-        OpenStreetMap road tags, assessed when this route was calculated.
-        Coverage measures available map data, not how safe a road is. No live
-        traffic or crime feed. Known accident-prone locations (sourced from
-        local news reports) are checked separately and shown below.
+        The comparison needs road matches for at least 90% of each route and
+        condition tags for at least 70%. Lighting contributes at night when
+        coverage reaches 70% on each route. Hairpin bends are outside this
+        comparison. Historical accident zones are checked separately.
       </p>
       <dl className="space-y-2">
         {[
@@ -34,7 +34,8 @@ export function RouteEvidence({ route }: { route: ScoredRoute }) {
       {route.hazardZones.length > 0 && (
         <div className="my-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 space-y-1">
           <p className="text-xs font-semibold">
-            ⚠ Known accident-prone zone{route.hazardZones.length > 1 ? "s" : ""} on this route
+            ⚠ Known accident-prone zone{route.hazardZones.length > 1 ? "s" : ""}{" "}
+            on this route
           </p>
           {route.hazardZones.map((zone) => (
             <div key={zone.id} className="text-xs">
@@ -54,8 +55,8 @@ export function RouteEvidence({ route }: { route: ScoredRoute }) {
       )}
       <p className="my-3 text-xs">
         {evidence.sufficient
-          ? "Enough mapped evidence for a relative comparison; this is not a safety guarantee."
-          : "Insufficient evidence to recommend a safer route."}
+          ? "This route meets the road-condition coverage thresholds."
+          : "This route has too little mapped data for a lower-risk comparison."}
       </p>
       <Button
         variant="outline"

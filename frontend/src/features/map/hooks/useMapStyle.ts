@@ -27,7 +27,7 @@ export function useMapStyle({
       appliedStyleIdRef.current = activeStyleId;
       const entry =
         MAP_STYLES.find((s) => s.id === activeStyleId) ?? MAP_STYLES[0]!;
-      map.setStyle(entry.style);
+      map.setStyle(entry.style, { diff: false });
     }
 
     const btns = map

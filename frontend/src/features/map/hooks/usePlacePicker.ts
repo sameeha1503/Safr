@@ -166,8 +166,6 @@ export function usePlacePicker({
 
       // 2. First check if saved places or clusters were hit
       const savedLayers = [
-        "safr-discovery-points",
-        "safr-discovery-clusters",
         "safr-saved-clusters",
         "safr-saved-cluster-count",
         "safr-saved-points",
