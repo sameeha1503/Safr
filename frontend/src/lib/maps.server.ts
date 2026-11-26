@@ -190,17 +190,17 @@ function scoreRoute(
       precomputedSteps.length > 0
         ? precomputedSteps.map((s) => ({ ...s, legIndex: idx }))
         : rawSteps.map((s) => ({
-            instruction: formatManeuverInstruction(s),
-            distanceMeters: Math.round(s.distance ?? 0),
-            durationSeconds: Math.round(s.duration ?? 0),
-            maneuverType: s.maneuver.type ?? "continue",
-            maneuverModifier: s.maneuver.modifier,
-            name: s.name || "Road",
-            location: s.maneuver.location
-              ? [s.maneuver.location[1], s.maneuver.location[0]]
-              : undefined,
-            legIndex: idx,
-          }));
+          instruction: formatManeuverInstruction(s),
+          distanceMeters: Math.round(s.distance ?? 0),
+          durationSeconds: Math.round(s.duration ?? 0),
+          maneuverType: s.maneuver.type ?? "continue",
+          maneuverModifier: s.maneuver.modifier,
+          name: s.name || "Road",
+          location: s.maneuver.location
+            ? [s.maneuver.location[1], s.maneuver.location[0]]
+            : undefined,
+          legIndex: idx,
+        }));
 
     const legDist = legSteps.reduce((acc, s) => acc + s.distanceMeters, 0);
     const legDur = legSteps.reduce((acc, s) => acc + s.durationSeconds, 0);
@@ -530,11 +530,11 @@ export async function computeSafeRoutes(
     // Bound public-service work for very long trips; unknown coverage is explicit.
     if (
       Math.max(...points.map((p) => p.lat)) -
-        Math.min(...points.map((p) => p.lat)) <
-        1 &&
+      Math.min(...points.map((p) => p.lat)) <
+      1 &&
       Math.max(...points.map((p) => p.lng)) -
-        Math.min(...points.map((p) => p.lng)) <
-        1
+      Math.min(...points.map((p) => p.lng)) <
+      1
     ) {
       ways = await fetchRoadWays(bounds);
     }
