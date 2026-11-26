@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { fetchJson } from "./places.server";
 import { getCached, setCached } from "./place-cache.server";
 import {
@@ -354,6 +355,21 @@ function roadWaysCacheKey(bounds: string): string {
   return `road-ways:${parts}`;
 }
 
+const defaultEndpoints = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
+
+function getOverpassEndpoints(): string[] {
+  const envUrl = process.env["OVERPASS_URL"]?.trim();
+  return [
+    ...(envUrl ? [envUrl] : []),
+    ...defaultEndpoints,
+  ].filter((url, idx, arr) => arr.indexOf(url) === idx);
+}
+
 export async function fetchRoadWays(bounds: string): Promise<RoadWay[]> {
   const cacheKey = roadWaysCacheKey(bounds);
   try {
@@ -368,18 +384,7 @@ export async function fetchRoadWays(bounds: string): Promise<RoadWay[]> {
     /* Cache read failure shouldn't block network lookup. */
   }
 
-  const defaultEndpoints = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-  ];
-
-  const envUrl = process.env["OVERPASS_URL"]?.trim();
-  const endpoints = [
-    ...(envUrl ? [envUrl] : []),
-    ...defaultEndpoints,
-  ].filter((url, idx, arr) => arr.indexOf(url) === idx);
+  const endpoints = getOverpassEndpoints();
 
   const query = `[out:json][timeout:10];way(${bounds})[highway][highway!~"^(footway|path|steps|cycleway|pedestrian|track|bridleway|corridor|elevator|proposed|construction|service)$"];out body qt;`;
 
@@ -466,6 +471,134 @@ export async function fetchRoadWays(bounds: string): Promise<RoadWay[]> {
   return [];
 }
 
+const roadWayByIdSchema = z.object({
+  id: z.number().optional(),
+  nodes: z.array(z.number()).optional().default([]),
+  tags: z.record(z.string()).default({}),
+});
+
+const overpassWaysByIdsResponseSchema = z.object({
+  remark: z.string().optional(),
+  elements: z.array(roadWayByIdSchema).optional().default([]),
+});
+
+export async function fetchRoadWaysByIds(ids: number[]): Promise<RoadWay[]> {
+  if (ids.length === 0) return [];
+
+  const sorted = [...ids].sort((a, b) => a - b);
+  const hash = createHash("sha1").update(sorted.join(",")).digest("hex");
+  const cacheKey = `road-ways-ids:${hash}`;
+
+  try {
+    const cached = await getCached(cacheKey);
+    if (Array.isArray(cached) && cached.length > 0) {
+      const parsed = z.array(roadWaySchema).safeParse(cached);
+      if (parsed.success && parsed.data.length > 0) {
+        return parsed.data;
+      }
+    }
+  } catch {
+    /* Cache read failure shouldn't block network lookup. */
+  }
+
+  const endpoints = getOverpassEndpoints();
+  const chunks: number[][] = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    chunks.push(ids.slice(i, i + 400));
+  }
+
+  const overallDeadline = Date.now() + 22000;
+  const reasons: string[] = [];
+  const ways: RoadWay[] = [];
+  let successfulHostname = "";
+
+  for (const chunk of chunks) {
+    const query = `[out:json][timeout:15];way(id:${chunk.join(",")});out tags;`;
+    let chunkWays: RoadWay[] | null = null;
+
+    for (const endpoint of endpoints) {
+      const remainingTotal = overallDeadline - Date.now();
+      if (remainingTotal <= 0) {
+        reasons.push("Total timeout of 22s exceeded");
+        break;
+      }
+
+      let hostname = endpoint;
+      try {
+        hostname = new URL(endpoint).hostname;
+      } catch {
+        // fallback to endpoint string
+      }
+
+      const timeoutMs = Math.min(10000, remainingTotal);
+
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+            "User-Agent":
+              "Safr/1.0 (Goa travel planner; https://github.com/Prajj11/Ideas)",
+          },
+          body: new URLSearchParams({ data: query }).toString(),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (!response.ok) {
+          const reason = `${hostname}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+          console.warn(`[routing] ${reason}`);
+          reasons.push(reason);
+          continue;
+        }
+
+        const json = (await response.json()) as unknown;
+        const data = overpassWaysByIdsResponseSchema.parse(json);
+
+        if (data.remark) {
+          const reason = `${hostname}: remark: ${data.remark}`;
+          console.warn(`[routing] ${reason}`);
+          reasons.push(reason);
+          continue;
+        }
+
+        chunkWays = data.elements;
+        successfulHostname = hostname;
+        break;
+      } catch (err: unknown) {
+        const msg = `${hostname}: ${err instanceof Error ? err.message : String(err)}`;
+        console.warn(`[routing] ${msg}`);
+        reasons.push(msg);
+      }
+    }
+
+    if (chunkWays && chunkWays.length > 0) {
+      ways.push(...chunkWays);
+    }
+  }
+
+  if (ways.length > 0) {
+    const hostname = successfulHostname || "overpass";
+    console.log(
+      `[routing] road tags by id: ${ways.length}/${ids.length} ways from ${hostname}`,
+    );
+
+    try {
+      await setCached(cacheKey, ways, 6 * 60 * 60);
+    } catch {
+      /* Cache write failure must not fail the request. */
+    }
+
+    return ways;
+  }
+
+  console.error(
+    "[routing] Overpass road-tags lookup by ID failed on all endpoints",
+    reasons,
+  );
+  return [];
+}
+
 export async function computeSafeRoutes(
   origin: { lat: number; lng: number; name?: string | undefined },
   destination: { lat: number; lng: number; name?: string | undefined },
@@ -523,20 +656,36 @@ export async function computeSafeRoutes(
   const hazardZonesAll = await fetchKnownHazardZones();
   let ways: RoadWay[] = [];
   try {
-    const points = unique.flatMap((r) =>
-      r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+    const ids = Array.from(
+      new Set(
+        unique
+          .flatMap((r) => r.legs ?? [])
+          .flatMap((leg) => leg.annotation?.wayIds ?? [])
+          .filter(
+            (id): id is number =>
+              typeof id === "number" && Number.isFinite(id) && id > 0,
+          ),
+      ),
     );
-    const bounds = roadBounds(points);
-    // Bound public-service work for very long trips; unknown coverage is explicit.
-    if (
-      Math.max(...points.map((p) => p.lat)) -
-      Math.min(...points.map((p) => p.lat)) <
-      1 &&
-      Math.max(...points.map((p) => p.lng)) -
-      Math.min(...points.map((p) => p.lng)) <
-      1
-    ) {
-      ways = await fetchRoadWays(bounds);
+
+    if (ids.length > 0) {
+      ways = await fetchRoadWaysByIds(ids);
+    } else {
+      const points = unique.flatMap((r) =>
+        r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+      );
+      const bounds = roadBounds(points);
+      // Bound public-service work for very long trips; unknown coverage is explicit.
+      if (
+        Math.max(...points.map((p) => p.lat)) -
+          Math.min(...points.map((p) => p.lat)) <
+          1 &&
+        Math.max(...points.map((p) => p.lng)) -
+          Math.min(...points.map((p) => p.lng)) <
+          1
+      ) {
+        ways = await fetchRoadWays(bounds);
+      }
     }
   } catch (err) {
     console.error(
