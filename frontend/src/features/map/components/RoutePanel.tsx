@@ -289,11 +289,18 @@ export function RoutePanel({
                     <span className="font-bold text-xs text-foreground">
                       {choice.title}
                     </span>
-                    {r.isSafest && choice.title !== "Lower risk" && (
-                      <span className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold">
-                        Lower risk
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {r.fewerRiskIndicators && (
+                        <span className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold">
+                          Fewer risk indicators
+                        </span>
+                      )}
+                      {r.isSafest && choice.title !== "Lower risk" && (
+                        <span className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold">
+                          Lower risk
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span className="block mt-1 font-bold text-sm text-foreground">
                     {r
@@ -315,10 +322,45 @@ export function RoutePanel({
                       </span>
                     </span>
                   )}
+                  {r.character && (
+                    <div className="mt-2.5 pt-2 border-t border-border/40 space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className="rounded-md bg-secondary/50 border border-border/40 px-1.5 py-0.5 text-muted-foreground">
+                          {r.character.sharpBends} sharp bend{r.character.sharpBends === 1 ? "" : "s"}
+                        </span>
+                        <span className="rounded-md bg-secondary/50 border border-border/40 px-1.5 py-0.5 text-muted-foreground">
+                          {r.character.hairpins} hairpin{r.character.hairpins === 1 ? "" : "s"}
+                        </span>
+                        <span className="rounded-md bg-secondary/50 border border-border/40 px-1.5 py-0.5 text-muted-foreground">
+                          {r.character.junctionsPerKm} junctions/km
+                        </span>
+                        {r.character.ghatKm > 0 && (
+                          <span className="rounded-md bg-secondary/50 border border-border/40 px-1.5 py-0.5 text-muted-foreground">
+                            Ghat stretch: {r.character.ghatKm} km
+                            {r.character.ghatNames.length > 0
+                              ? ` (${r.character.ghatNames.join(", ")})`
+                              : ""}
+                          </span>
+                        )}
+                      </div>
+                      {r.character.mainRoadKm !== null && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          {r.character.mainRoadKm} km on main roads
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}
           </div>
+          <p className="text-xs text-muted-foreground px-1">
+            Indicators come from the route&apos;s own geometry, its turn list and{" "}
+            {currentRoute.knownHazardZonesCount
+              ? `${currentRoute.knownHazardZonesCount} sourced accident-prone locations`
+              : "sourced accident-prone locations"}
+            . They are not an accident prediction. Surface and lighting: not enough mapped data to compare.
+          </p>
           <RouteEvidence route={currentRoute} />
 
           {/* Active Route Details Card */}

@@ -16,6 +16,13 @@ import {
   type HazardZone,
 } from "./hazard-zones.server";
 import { roadWaysFromSnapshot } from "./goa-road-tags.server";
+import {
+  computeRouteCharacter,
+  computeFewerRiskIndicators,
+  type RouteCharacter,
+} from "./route-character";
+
+export type { RouteCharacter } from "./route-character";
 
 export type PlaceHit = {
   id: string;
@@ -115,6 +122,9 @@ export type ScoredRoute = {
   safety: SafetyEvidence;
   hazardZones: HazardZone[];
   hazardDataAvailable?: boolean;
+  knownHazardZonesCount?: number | undefined;
+  character: RouteCharacter;
+  fewerRiskIndicators: boolean;
   isFastest: boolean;
   isShortest: boolean;
   isSafest: boolean;
@@ -175,6 +185,7 @@ function scoreRoute(
   waypoints: Waypoint[] = [],
   mode: string = "car",
   hazardZones: HazardZone[] = [],
+  mainRoadKm: number | null = null,
 ): ScoredRoute {
   const durationMin = Math.ceil(route.duration / 60);
   const distanceKm = Math.round(route.distance / 100) / 10;
@@ -279,6 +290,14 @@ function scoreRoute(
     googleMapsUrl,
     mode,
     waypoints,
+    character: computeRouteCharacter({
+      points: route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+      steps,
+      routeDistanceMeters: route.distance,
+      hazardZones,
+      mainRoadKm,
+    }),
+    fewerRiskIndicators: false,
   };
 }
 
@@ -703,8 +722,51 @@ export async function computeSafeRoutes(
     );
     /* Never substitute fabricated safety scores for missing map data. */
   }
-  const candidates = unique.map((r) =>
-    scoreRoute(
+  const wayTagsMap = new Map<number, Record<string, string>>();
+  for (const w of ways) {
+    if (typeof w.id === "number") {
+      wayTagsMap.set(w.id, w.tags);
+    }
+  }
+
+  const candidates = unique.map((r) => {
+    let mainRoadKm: number | null = null;
+    const hasAnnotation = (r.legs ?? []).some(
+      (leg) =>
+        Array.isArray(leg.annotation?.wayIds) &&
+        leg.annotation.wayIds.length > 0 &&
+        Array.isArray(leg.annotation?.distance) &&
+        leg.annotation.distance.length > 0,
+    );
+
+    if (hasAnnotation && wayTagsMap.size > 0) {
+      let mainRoadMeters = 0;
+      for (const leg of r.legs ?? []) {
+        const wayIds = leg.annotation?.wayIds;
+        const distances = leg.annotation?.distance;
+        if (wayIds && distances) {
+          for (let idx = 0; idx < wayIds.length; idx++) {
+            const wid = wayIds[idx];
+            const dist = distances[idx] ?? 0;
+            if (wid && wid > 0) {
+              const tags = wayTagsMap.get(wid);
+              const hw = tags?.["highway"];
+              if (
+                hw === "trunk" ||
+                hw === "trunk_link" ||
+                hw === "primary" ||
+                hw === "primary_link"
+              ) {
+                mainRoadMeters += dist;
+              }
+            }
+          }
+        }
+      }
+      mainRoadKm = Math.round((mainRoadMeters / 1000) * 10) / 10;
+    }
+
+    return scoreRoute(
       r,
       origin,
       destination,
@@ -715,18 +777,44 @@ export async function computeSafeRoutes(
         r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
         hazardZonesAll ?? [],
       ),
-    ),
-  );
+      mainRoadKm,
+    );
+  });
+
   const best = routePreferences(candidates);
   const safestIndex = best.safest;
-  return candidates.map((r, i) => ({
-    ...r,
-    hazardDataAvailable: hazardZonesAll !== null,
-    kind: i === best.fastest ? "fastest" : i === safestIndex ? "safer" : "alt",
-    label:
-      i === best.fastest ? "Fastest available route" : `Alternative ${i + 1}`,
-    isFastest: i === best.fastest,
-    isShortest: i === best.shortest,
-    isSafest: i === safestIndex,
-  }));
+  const fewerFlags = computeFewerRiskIndicators(
+    candidates,
+    hazardZonesAll !== null,
+  );
+
+  return candidates.map((r, i) => {
+    const fewerRiskIndicators = fewerFlags[i] ?? false;
+    const label =
+      i === best.fastest ? "Fastest available route" : `Alternative ${i + 1}`;
+    const c = r.character;
+    console.log(
+      "[route-character]",
+      label,
+      c.sharpBends,
+      c.hairpins,
+      c.bendsPer10Km,
+      c.junctionsPerKm,
+      c.ghatKm,
+      c.accidentZones,
+    );
+
+    return {
+      ...r,
+      character: c,
+      fewerRiskIndicators,
+      hazardDataAvailable: hazardZonesAll !== null,
+      knownHazardZonesCount: hazardZonesAll?.length,
+      kind: i === best.fastest ? "fastest" : i === safestIndex ? "safer" : "alt",
+      label,
+      isFastest: i === best.fastest,
+      isShortest: i === best.shortest,
+      isSafest: i === safestIndex,
+    };
+  });
 }
