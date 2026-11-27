@@ -55,10 +55,12 @@ function TagCard({
   onDelete: (id: string) => void;
 }) {
   const [qr, setQr] = useState<string>("");
-  const url =
-    typeof window === "undefined"
-      ? ""
-      : `${window.location.origin}/t/${tag.token}`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const url = origin ? `${origin}/t/${tag.token}` : "";
+  const findHref = origin ? `${origin}/find` : "/find";
+  const findText = origin
+    ? `${origin.replace(/^https?:\/\//, "")}/find`
+    : "the Safr website";
 
   useEffect(() => {
     if (!url) return;
@@ -157,8 +159,16 @@ function TagCard({
           {/* Wristband Instructions */}
           <div className="mt-4 rounded-2xl bg-amber/10 border border-amber/20 p-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
             <p className="font-bold mb-0.5">Printed Wristband Message:</p>
-            "If lost, scan QR or visit <strong>safr.in/find</strong> & enter
-            OTP: <strong>{tag.token}</strong>"
+            "If lost, scan QR or visit{" "}
+            <a
+              href={findHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold underline"
+            >
+              {findText}
+            </a>{" "}
+            & enter OTP: <strong>{tag.token}</strong>"
           </div>
         </div>
       </div>
