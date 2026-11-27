@@ -10,6 +10,7 @@ import {
   Printer,
   QrCode,
   ShieldCheck,
+  ShieldOff,
   Sparkles,
   Trash2,
   Users,
@@ -45,14 +46,20 @@ type TagRow = {
   medical_notes: string | null;
   description: string | null;
   created_at: string;
+  is_active: boolean;
+  disabled_at: string | null;
 };
 
 function TagCard({
   tag,
   onDelete,
+  onToggleActive,
+  isPendingActive,
 }: {
   tag: TagRow;
   onDelete: (id: string) => void;
+  onToggleActive: (id: string, active: boolean) => void;
+  isPendingActive?: boolean;
 }) {
   const [qr, setQr] = useState<string>("");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -95,7 +102,9 @@ function TagCard({
               <img
                 src={qr}
                 alt={`QR code for ${tag.person_name}`}
-                className="size-28 rounded-lg object-contain"
+                className={`size-28 rounded-lg object-contain transition-opacity ${
+                  tag.is_active === false ? "opacity-40" : ""
+                }`}
               />
             </div>
           ) : (
@@ -110,13 +119,20 @@ function TagCard({
         {/* Member Details */}
         <div className="no-print min-w-0 flex-1 w-full">
           <div className="flex items-center justify-between gap-2">
-            <span className="rounded-full bg-emerald/10 text-emerald border border-emerald/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
-              {tag.category === "kid"
-                ? "Child Tag"
-                : tag.category === "senior"
-                  ? "Elderly Tag"
-                  : "Member Tag"}
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="rounded-full bg-emerald/10 text-emerald border border-emerald/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
+                {tag.category === "kid"
+                  ? "Child Tag"
+                  : tag.category === "senior"
+                    ? "Elderly Tag"
+                    : "Member Tag"}
+              </span>
+              {tag.is_active === false && (
+                <span className="rounded-full bg-destructive/10 text-destructive border border-destructive/30 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
+                  DISABLED
+                </span>
+              )}
+            </div>
             <span className="text-[11px] text-muted-foreground font-medium">
               Created {new Date(tag.created_at).toLocaleDateString()}
             </span>
@@ -159,30 +175,62 @@ function TagCard({
           {/* Wristband Instructions */}
           <div className="mt-4 rounded-2xl bg-amber/10 border border-amber/20 p-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
             <p className="font-bold mb-0.5">Printed Wristband Message:</p>
-            "If lost, scan QR or visit{" "}
-            <a
-              href={findHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-bold underline"
-            >
-              {findText}
-            </a>{" "}
-            & enter OTP: <strong>{tag.token}</strong>"
+            {tag.is_active === false ? (
+              <span className="font-semibold text-destructive">
+                This tag is disabled. Scans will not alert anyone.
+              </span>
+            ) : (
+              <>
+                "If lost, scan QR or visit{" "}
+                <a
+                  href={findHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold underline"
+                >
+                  {findText}
+                </a>{" "}
+                & enter OTP: <strong>{tag.token}</strong>"
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="no-print mt-5 pt-4 border-t border-border/40 flex items-center justify-between gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handlePrint}
-          className="rounded-full font-bold text-xs gap-1.5 shadow-sm hover:border-primary/40"
-        >
-          <Printer className="size-3.5" /> Print QR
-        </Button>
+      <div className="no-print mt-5 pt-4 border-t border-border/40 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handlePrint}
+            className="rounded-full font-bold text-xs gap-1.5 shadow-sm hover:border-primary/40"
+          >
+            <Printer className="size-3.5" /> Print QR
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPendingActive}
+            onClick={() => {
+              if (tag.is_active !== false) {
+                if (
+                  window.confirm(
+                    "Disable this tag? Anyone scanning it will see that it is disabled and no alerts will be sent. You can re-enable it later.",
+                  )
+                ) {
+                  onToggleActive(tag.id, false);
+                }
+              } else {
+                onToggleActive(tag.id, true);
+              }
+            }}
+            className="rounded-full font-bold text-xs gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/60 shadow-sm"
+          >
+            <ShieldOff className="size-3.5" />
+            {tag.is_active !== false ? "Disable" : "Re-enable"}
+          </Button>
+        </div>
         <Button
           size="sm"
           variant="ghost"
@@ -304,6 +352,29 @@ function SafetyTags() {
     },
     onError: (e) =>
       toast.error(e instanceof Error ? e.message : "Failed to delete tag"),
+  });
+
+  const setTagActive = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const { error } = await supabase
+        .from("safety_tags")
+        .update({
+          is_active: active,
+          disabled_at: active ? null : new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      toast.success(
+        variables.active ? "SafeTag re-enabled" : "SafeTag disabled",
+      );
+      queryClient.invalidateQueries({ queryKey: ["safety-tags"] });
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof Error ? e.message : "Failed to update tag status",
+      ),
   });
 
   return (
@@ -618,6 +689,10 @@ function SafetyTags() {
                 key={tag.id}
                 tag={tag}
                 onDelete={(id) => deleteTag.mutate(id)}
+                onToggleActive={(id, active) =>
+                  setTagActive.mutate({ id, active })
+                }
+                isPendingActive={setTagActive.isPending}
               />
             ))}
           </div>

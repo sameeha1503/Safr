@@ -16,7 +16,7 @@ test("malformed JSON values return a client error before querying the database",
   }
 });
 
-test("mock delivery is never reported as a real guardian notification and invalid coordinates are discarded", async (t) => {
+test("mock delivery counts as notified and invalid coordinates are ignored", async (t) => {
   const keys = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "NOTIFY_MODE"];
   const previous = keys.map((key) => process.env[key]);
   t.after(() =>
@@ -47,10 +47,108 @@ test("mock delivery is never reported as a real guardian notification and invali
     "MOCK",
   );
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).notified, false);
+  assert.equal((await response.json()).notified, true);
   assert.equal(scan?.lat, null);
   assert.equal(scan?.lng, null);
   assert.equal(scan?.finder_note, null);
+});
+
+test("disabled or inactive tag returns 403 and records no scan or notification", async (t) => {
+  const keys = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "NOTIFY_MODE"];
+  const previous = keys.map((key) => process.env[key]);
+  t.after(() =>
+    keys.forEach((key, index) => {
+      if (previous[index] === undefined) delete process.env[key];
+      else process.env[key] = previous[index];
+    }),
+  );
+  process.env.SUPABASE_URL = "https://fixture.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "fixture-service-key";
+  process.env.NOTIFY_MODE = "mock";
+
+  let scanInserted = false;
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).includes("/safety_tags?")) {
+      return Response.json([
+        {
+          id: "tag-disabled-id",
+          token: "DISABLED-TAG",
+          person_name: "Secret Name",
+          guardian_phone: "9876543210",
+          is_active: false,
+        },
+      ]);
+    }
+    if (String(input).includes("/safety_tag_scans")) {
+      scanInserted = true;
+      return Response.json(null, { status: 201 });
+    }
+    return Response.json(null);
+  });
+
+  const response = await handleTagAlertRequest(
+    new Request("https://safr.test/alert", {
+      method: "POST",
+      headers: { "x-forwarded-for": "10.10.1.1" },
+      body: JSON.stringify({ location: "At the beach" }),
+    }),
+    "DISABLED-TAG",
+  );
+
+  assert.equal(response.status, 403);
+  const data = await response.json();
+  assert.equal(data.error, "This SafeTag has been disabled by its owner.");
+  assert.equal(data.person_name, undefined);
+  assert.equal(data.guardian_phone, undefined);
+  assert.equal(scanInserted, false);
+});
+
+test("active tag returns 200 and records scan", async (t) => {
+  const keys = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "NOTIFY_MODE"];
+  const previous = keys.map((key) => process.env[key]);
+  t.after(() =>
+    keys.forEach((key, index) => {
+      if (previous[index] === undefined) delete process.env[key];
+      else process.env[key] = previous[index];
+    }),
+  );
+  process.env.SUPABASE_URL = "https://fixture.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "fixture-service-key";
+  process.env.NOTIFY_MODE = "mock";
+
+  let scanInserted = false;
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).includes("/safety_tags?")) {
+      return Response.json([
+        {
+          id: "tag-active-id",
+          token: "ACTIVE-TAG",
+          person_name: "Active Person",
+          guardian_phone: "9876543210",
+          is_active: true,
+        },
+      ]);
+    }
+    if (String(input).includes("/safety_tag_scans")) {
+      scanInserted = true;
+      return Response.json(null, { status: 201 });
+    }
+    return Response.json(null);
+  });
+
+  const response = await handleTagAlertRequest(
+    new Request("https://safr.test/alert", {
+      method: "POST",
+      headers: { "x-forwarded-for": "10.10.1.2" },
+      body: JSON.stringify({ location: "Near the shack" }),
+    }),
+    "ACTIVE-TAG",
+  );
+
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.success, true);
+  assert.equal(scanInserted, true);
 });
 
 test("live notification configuration failures are failures rather than simulated successes", async (t) => {

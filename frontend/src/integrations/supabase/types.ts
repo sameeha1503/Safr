@@ -162,9 +162,11 @@ export type Database = {
           category: string;
           created_at: string;
           description: string | null;
+          disabled_at: string | null;
           guardian_name: string;
           guardian_phone: string;
           id: string;
+          is_active: boolean;
           medical_notes: string | null;
           person_age: number | null;
           person_name: string;
@@ -177,9 +179,11 @@ export type Database = {
           category?: string;
           created_at?: string;
           description?: string | null;
+          disabled_at?: string | null;
           guardian_name: string;
           guardian_phone: string;
           id?: string;
+          is_active?: boolean;
           medical_notes?: string | null;
           person_age?: number | null;
           person_name: string;
@@ -192,9 +196,11 @@ export type Database = {
           category?: string;
           created_at?: string;
           description?: string | null;
+          disabled_at?: string | null;
           guardian_name?: string;
           guardian_phone?: string;
           id?: string;
+          is_active?: boolean;
           medical_notes?: string | null;
           person_age?: number | null;
           person_name?: string;

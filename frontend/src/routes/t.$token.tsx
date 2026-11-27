@@ -172,7 +172,36 @@ function TagPage() {
           </div>
         )}
 
-        {data && !sent && (
+        {!isLoading && data && data.is_active === false && (
+          <div className="rounded-3xl border border-border/60 bg-card/85 backdrop-blur-2xl p-8 sm:p-10 text-center shadow-2xl">
+            <ShieldAlert className="mx-auto size-12 text-destructive" />
+            <h1 className="mt-4 text-2xl font-bold font-display tracking-tight">
+              This SafeTag has been disabled
+            </h1>
+            <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              The owner has disabled this tag, for example because it was lost.
+              No alert can be sent from it. If someone needs urgent help in Goa,
+              call the emergency services.
+            </p>
+            <div className="mt-6 space-y-2">
+              <a
+                href={`tel:${EMERGENCY_NUMBERS.police}`}
+                className="inline-flex w-full items-center justify-center rounded-full bg-destructive px-4 py-3.5 text-sm font-bold text-destructive-foreground shadow-md hover:opacity-90 transition-opacity"
+              >
+                <Phone className="size-4 mr-2" /> Call Goa Police (
+                {EMERGENCY_NUMBERS.police})
+              </a>
+              <a
+                href={`tel:${EMERGENCY_NUMBERS.childline}`}
+                className="inline-flex w-full items-center justify-center rounded-full bg-secondary px-4 py-3 text-xs font-bold text-foreground hover:bg-secondary/80 transition-colors"
+              >
+                Call National Childline ({EMERGENCY_NUMBERS.childline})
+              </a>
+            </div>
+          </div>
+        )}
+
+        {data && data.is_active !== false && !sent && (
           <div className="rounded-3xl border border-border/60 bg-card/85 backdrop-blur-2xl p-8 sm:p-10 shadow-2xl">
             <div className="flex items-center gap-2.5">
               <div className="size-10 rounded-2xl bg-emerald/10 text-emerald flex items-center justify-center shrink-0">
@@ -262,7 +291,7 @@ function TagPage() {
           </div>
         )}
 
-        {sent && (
+        {data && data.is_active !== false && sent && (
           <div
             className={`rounded-3xl border ${notified ? "border-emerald/30" : "border-amber-500/30"} bg-card/85 backdrop-blur-2xl p-8 sm:p-10 text-center shadow-2xl animate-in zoom-in-95 duration-300`}
           >

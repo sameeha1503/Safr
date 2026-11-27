@@ -87,7 +87,7 @@ export async function handleTagAlertRequest(
     // Load tag and guardian details server-side ONLY
     const { data: tag, error: tagError } = await supabaseAdmin
       .from("safety_tags")
-      .select("id, token, person_name, guardian_name, guardian_phone")
+      .select("id, token, person_name, guardian_name, guardian_phone, is_active")
       .eq("token", cleanCode)
       .abortSignal(AbortSignal.timeout(6000))
       .maybeSingle();
@@ -96,6 +96,13 @@ export async function handleTagAlertRequest(
       return Response.json(
         { error: "Tag not found or inactive." },
         { status: 404 },
+      );
+    }
+
+    if (tag.is_active === false) {
+      return Response.json(
+        { error: "This SafeTag has been disabled by its owner." },
+        { status: 403 },
       );
     }
 
