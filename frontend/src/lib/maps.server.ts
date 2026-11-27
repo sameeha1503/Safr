@@ -33,7 +33,38 @@ export type PlaceHit = {
 };
 
 export async function searchGoaPlaces(query: string): Promise<PlaceHit[]> {
+  const cleanQuery = query.trim().toLowerCase();
+  const matchedZones: PlaceHit[] = [];
+
+  if (cleanQuery.length >= 3) {
+    try {
+      const hazardZones = await fetchKnownHazardZones();
+      if (hazardZones && Array.isArray(hazardZones)) {
+        for (const zone of hazardZones) {
+          const labelLower = zone.label.toLowerCase();
+          const words = labelLower.split(/\s+/);
+          const isContained = labelLower.includes(cleanQuery);
+          const wordStartsWith = words.some((w) => w.startsWith(cleanQuery));
+
+          if (isContained || wordStartsWith) {
+            matchedZones.push({
+              id: `hazard/${zone.id}`,
+              name: zone.label,
+              address: "Known accident-prone location (sourced)",
+              lat: zone.lat,
+              lng: zone.lng,
+            });
+          }
+        }
+      }
+    } catch {
+      // skip silently
+    }
+  }
+
   const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query + " Goa")}&lat=15.35&lon=73.95&limit=6`;
+  let photonHits: PlaceHit[] = [];
+
   try {
     const json = z
       .object({
@@ -44,7 +75,10 @@ export async function searchGoaPlaces(query: string): Promise<PlaceHit[]> {
               osm_type: z.string().optional(),
               name: z.string().optional(),
               street: z.string().optional(),
+              locality: z.string().optional(),
+              district: z.string().optional(),
               city: z.string().optional(),
+              county: z.string().optional(),
               state: z.string().optional(),
             }),
             geometry: z.object({
@@ -55,21 +89,46 @@ export async function searchGoaPlaces(query: string): Promise<PlaceHit[]> {
       })
       .parse(await fetchJson(url, {}, 6000));
 
-    return json.features
+    photonHits = json.features
       .filter((f) => f.properties.state === "Goa")
-      .map((f) => ({
-        id: `${f.properties.osm_type || "place"}/${f.properties.osm_id}`,
-        name: f.properties.name ?? "Unnamed place",
-        address:
+      .map((f) => {
+        const name =
+          f.properties.name?.trim() ||
+          f.properties.street?.trim() ||
+          f.properties.locality?.trim() ||
+          f.properties.district?.trim() ||
+          f.properties.city?.trim() ||
+          f.properties.county?.trim() ||
+          "Unnamed place";
+
+        const address =
           [f.properties.street, f.properties.city, f.properties.state]
             .filter(Boolean)
-            .join(", ") || "Goa, India",
-        lat: f.geometry.coordinates[1],
-        lng: f.geometry.coordinates[0],
-      }));
+            .join(", ") || "Goa, India";
+
+        return {
+          id: `${f.properties.osm_type || "place"}/${f.properties.osm_id}`,
+          name,
+          address,
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+        };
+      });
   } catch {
-    return [];
+    photonHits = [];
   }
+
+  const filteredPhotonHits = photonHits.filter((p) => {
+    const pNorm = p.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!pNorm) return true;
+    return !matchedZones.some((z) => {
+      const zNorm = z.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (!zNorm) return false;
+      return zNorm === pNorm || zNorm.includes(pNorm) || pNorm.includes(zNorm);
+    });
+  });
+
+  return [...matchedZones, ...filteredPhotonHits];
 }
 
 export type OSRMStep = {
